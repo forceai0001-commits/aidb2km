@@ -1,0 +1,680 @@
+﻿<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Force AI知識轉譯工具 v1.0</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 引入 JSZip 用於壓縮檔案 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'] },
+                    colors: {
+                        brand: { 50: '#f0f9ff', 100: '#e0f2fe', 500: '#0ea5e9', 600: '#0284c7', 700: '#0369a1', 900: '#0c4a6e' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { -webkit-font-smoothing: antialiased; }
+        .preview-iframe { width: 100%; height: 100%; border: none; pointer-events: none; user-select: none; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        /* 編輯模式的狀態樣式 */
+        .mode-sync .status-dot { background-color: #22c55e; box-shadow: 0 0 8px rgba(34, 197, 94, 0.4); }
+        .mode-manual .status-dot { background-color: #f59e0b; box-shadow: 0 0 8px rgba(245, 158, 11, 0.4); }
+        .mode-manual .meta-input { opacity: 0.5; pointer-events: none; background-color: #f8fafc; }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800 h-screen flex flex-col overflow-hidden mode-sync" id="appBody">
+
+
+    <!-- Top Navigation -->
+    <nav class="bg-white border-b border-slate-200 h-16 flex items-center justify-between px-6 shrink-0 z-20 shadow-sm">
+        <div class="flex items-center gap-4">
+            <div class="w-9 h-9 bg-brand-600 rounded-lg flex items-center justify-center text-white font-bold text-xl shadow-md bg-gradient-to-br from-brand-500 to-brand-700">F</div>
+            <div class="flex flex-col">
+                <h1 class="font-bold text-lg text-slate-800 leading-none tracking-tight">Force AI知識轉譯工具 <span class="text-xs font-normal text-brand-600 bg-brand-50 px-1.5 py-0.5 rounded border border-brand-100 ml-1">v1.0</span></h1>
+                <p class="text-[11px] text-slate-500 font-medium mt-1 tracking-wide">
+                    Force Cheng x 宏大職訓2025產業新尖兵課程
+                </p>
+            </div>
+        </div>
+        <div class="flex gap-3">
+            <button onclick="app.toggleHelp()" class="text-slate-600 hover:text-brand-600 hover:bg-slate-50 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                使用說明
+            </button>
+            <button onclick="window.location.reload()" class="text-slate-500 hover:text-red-600 hover:bg-red-50 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                重置全域
+            </button>
+        </div>
+    </nav>
+
+
+    <!-- Main Workspace -->
+    <main class="flex-1 flex flex-col lg:flex-row overflow-hidden relative">
+        
+        <!-- Instructions Modal (Hidden by default) -->
+        <div id="helpModal" class="hidden absolute inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
+            <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto custom-scrollbar flex flex-col">
+                <div class="p-6 border-b border-slate-100 flex justify-between items-center sticky top-0 bg-white z-10">
+                    <h2 class="text-xl font-bold text-slate-800 flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-brand-600"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                        使用說明書
+                    </h2>
+                    <button onclick="app.toggleHelp()" class="text-slate-400 hover:text-slate-600 p-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                </div>
+                <div class="p-8 space-y-8">
+                    <!-- Step 1 -->
+                    <div class="flex gap-4">
+                        <div class="w-8 h-8 rounded-full bg-brand-100 text-brand-600 font-bold flex items-center justify-center shrink-0">1</div>
+                        <div>
+                            <h3 class="font-bold text-slate-800 mb-1">匯入原始檔案</h3>
+                            <p class="text-sm text-slate-600 leading-relaxed">
+                                支援 <strong>.mhtml</strong> (網頁封存) 與 <strong>.html</strong> 格式。工具會自動移除網頁中的廣告、選單、與程式碼雜訊，僅保留對話或文章核心內容。
+                            </p>
+                        </div>
+                    </div>
+                    <!-- Step 2 -->
+                    <div class="flex gap-4">
+                        <div class="w-8 h-8 rounded-full bg-brand-100 text-brand-600 font-bold flex items-center justify-center shrink-0">2</div>
+                        <div>
+                            <h3 class="font-bold text-slate-800 mb-1">補充專案資訊 (Metadata)</h3>
+                            <p class="text-sm text-slate-600 leading-relaxed">
+                                在左側面板填寫標題、日期與備註。這些資訊會自動生成為文件檔頭 (Frontmatter)，幫助 AI 更快理解上下文。
+                                <br><span class="text-xs text-brand-600 bg-brand-50 px-1 rounded mt-1 inline-block">Tips: 左側修改會即時同步到右側預覽區。</span>
+                            </p>
+                        </div>
+                    </div>
+                    <!-- Step 3 -->
+                    <div class="flex gap-4">
+                        <div class="w-8 h-8 rounded-full bg-brand-100 text-brand-600 font-bold flex items-center justify-center shrink-0">3</div>
+                        <div>
+                            <h3 class="font-bold text-slate-800 mb-1">人工校對 (Human-in-the-loop)</h3>
+                            <p class="text-sm text-slate-600 leading-relaxed">
+                                在右側「作業區」可以直接編輯文字。一旦開始打字，系統會進入<strong>手動編輯模式</strong>，鎖定左側同步功能以保護您的修改。若需重置，點擊左側黃色提示區的「恢復自動同步」。
+                            </p>
+                        </div>
+                    </div>
+                    <!-- Step 4 -->
+                    <div class="flex gap-4">
+                        <div class="w-8 h-8 rounded-full bg-brand-100 text-brand-600 font-bold flex items-center justify-center shrink-0">4</div>
+                        <div>
+                            <h3 class="font-bold text-slate-800 mb-1">匯出知識庫</h3>
+                            <p class="text-sm text-slate-600 leading-relaxed">
+                                支援多種格式匯出：
+                                <ul class="list-disc pl-5 mt-1 space-y-1 text-slate-500">
+                                    <li><strong>Markdown</strong>: 適合 AI 讀取或 Obsidian 筆記。</li>
+                                    <li><strong>JSON</strong>: 適合透過 API 傳送到 Google Sheets (GAS)。</li>
+                                    <li><strong>ZIP</strong>: 將原始 MHTML/HTML 檔案壓縮打包，方便繳交作業。</li>
+                                </ul>
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                <div class="p-6 border-t border-slate-100 bg-slate-50 flex justify-end">
+                    <button onclick="app.toggleHelp()" class="bg-brand-600 text-white px-6 py-2 rounded-lg hover:bg-brand-700 font-medium transition-colors">
+                        開始使用
+                    </button>
+                </div>
+            </div>
+        </div>
+
+
+        <!-- Left Panel: Controls & Input -->
+        <aside class="w-full lg:w-[400px] bg-white border-r border-slate-200 flex flex-col h-full overflow-y-auto custom-scrollbar z-10 shadow-lg lg:shadow-none relative">
+            
+            <div class="p-6 space-y-8 flex-1">
+                <!-- 1. File Upload Section -->
+                <section>
+                    <h2 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">1. 檔案來源</h2>
+                    <div id="dropZone" class="border-2 border-dashed border-slate-300 rounded-xl bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer group relative overflow-hidden">
+                        <input type="file" id="fileInput" class="absolute inset-0 opacity-0 cursor-pointer z-10" accept=".mhtml,.mht,.html,.htm">
+                        <div class="p-8 flex flex-col items-center justify-center text-center">
+                            <div class="w-12 h-12 bg-white border border-slate-200 rounded-full flex items-center justify-center mb-3 shadow-sm group-hover:scale-110 transition-transform">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-brand-600"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                            </div>
+                            <p class="font-medium text-slate-700">點擊或拖放檔案</p>
+                            <p class="text-xs text-slate-500 mt-1">支援 .mhtml, .html (完整/單一)</p>
+                        </div>
+                        <!-- Success State -->
+                        <div id="fileInfo" class="hidden absolute inset-0 bg-brand-50 flex flex-col items-center justify-center z-20 pointer-events-none">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-brand-600 mb-2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+                            <span id="fileNameDisplay" class="font-medium text-brand-900 text-sm px-4 truncate w-full text-center">filename.mhtml</span>
+                            <span class="text-xs text-brand-600 mt-1">點擊以更換</span>
+                        </div>
+                    </div>
+                </section>
+
+
+                <!-- 2. Metadata Section -->
+                <section id="metaSection" class="opacity-50 pointer-events-none transition-opacity duration-300 relative">
+                    <div class="flex items-center justify-between mb-4">
+                        <h2 class="text-xs font-bold text-slate-400 uppercase tracking-wider">2. 專案資訊 (Metadata)</h2>
+                        <!-- Sync Status Indicator -->
+                        <div id="syncStatus" class="flex items-center gap-1.5 text-[10px] font-medium text-green-600 px-2 py-1 bg-green-50 rounded-full border border-green-100">
+                            <span class="w-1.5 h-1.5 rounded-full bg-green-500 status-dot"></span>
+                            自動同步中
+                        </div>
+                    </div>
+                    
+                    <!-- Manual Mode Warning Overlay -->
+                    <div id="manualModeOverlay" class="hidden absolute inset-0 bg-white/80 backdrop-blur-[2px] z-30 flex flex-col items-center justify-center text-center p-6 border border-amber-200 rounded-lg shadow-sm">
+                        <div class="w-10 h-10 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mb-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                        </div>
+                        <p class="text-sm font-bold text-slate-800 mb-1">手動編輯模式</p>
+                        <p class="text-xs text-slate-500 mb-4">左側同步已鎖定，以保護您的修改</p>
+                        <button onclick="app.restoreSync()" class="w-full px-4 py-2 bg-white border border-slate-300 text-slate-700 text-xs font-medium rounded-lg hover:bg-slate-50 hover:border-brand-300 hover:text-brand-600 transition-all flex items-center justify-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
+                            恢復自動同步
+                        </button>
+                    </div>
+
+
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">文件標題</label>
+                            <input type="text" id="metaTitle" class="meta-input w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-shadow" placeholder="例如：2024 AI 架構會議記錄">
+                        </div>
+                        
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">日期</label>
+                                <input type="date" id="metaDate" class="meta-input w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">標籤/類型</label>
+                                <input type="text" id="metaTags" class="meta-input w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" placeholder="e.g. Brainstorming">
+                            </div>
+                        </div>
+
+
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">備註說明</label>
+                            <textarea id="metaNotes" rows="3" class="meta-input w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none" placeholder="補充上下文，以便 AI 理解..."></textarea>
+                        </div>
+                    </div>
+                </section>
+
+
+                <!-- 3. Export Section -->
+                <section id="exportSection" class="opacity-50 pointer-events-none transition-opacity duration-300 pb-8">
+                    <h2 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">3. 匯出/備份</h2>
+                    <div class="grid grid-cols-2 gap-3 mb-3">
+                        <button onclick="app.download('md')" class="flex items-center justify-center gap-2 p-2.5 border border-slate-200 rounded-lg bg-white hover:bg-slate-50 hover:border-brand-300 hover:text-brand-600 hover:shadow-sm transition-all group text-left">
+                            <span class="text-xs font-bold text-slate-700 group-hover:text-brand-600">Markdown</span>
+                            <span class="text-[10px] text-slate-400 bg-slate-100 px-1 rounded">AI</span>
+                        </button>
+                        <button onclick="app.download('json')" class="flex items-center justify-center gap-2 p-2.5 border border-slate-200 rounded-lg bg-white hover:bg-slate-50 hover:border-brand-300 hover:text-brand-600 hover:shadow-sm transition-all group text-left">
+                            <span class="text-xs font-bold text-slate-700 group-hover:text-brand-600">JSON</span>
+                            <span class="text-[10px] text-slate-400 bg-slate-100 px-1 rounded">API</span>
+                        </button>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <button onclick="app.download('txt')" class="flex items-center justify-center gap-2 p-2.5 border border-slate-200 rounded-lg bg-white hover:bg-slate-50 hover:border-brand-300 hover:text-brand-600 hover:shadow-sm transition-all group text-left">
+                            <span class="text-xs font-bold text-slate-700 group-hover:text-brand-600">Text</span>
+                            <span class="text-[10px] text-slate-400 bg-slate-100 px-1 rounded">純文字</span>
+                        </button>
+                        <button onclick="app.download('zip')" class="flex items-center justify-center gap-2 p-2.5 border border-slate-200 rounded-lg bg-white hover:bg-slate-50 hover:border-brand-300 hover:text-brand-600 hover:shadow-sm transition-all group text-left">
+                            <span class="text-xs font-bold text-slate-700 group-hover:text-brand-600">ZIP</span>
+                            <span class="text-[10px] text-slate-400 bg-slate-100 px-1 rounded">原始檔</span>
+                        </button>
+                    </div>
+                </section>
+            </div>
+
+
+            <!-- Footer with Copyright -->
+            <footer class="p-4 border-t border-slate-100 bg-slate-50 text-center">
+                <p class="text-[10px] text-slate-400 font-mono leading-tight">
+                    &copy; Force Cheng 2025/12/18<br>
+                    Force AI知識轉譯工具 v1.0
+                </p>
+            </footer>
+        </aside>
+
+
+        <!-- Right Panel: Preview (Main content) -->
+        <section class="flex-1 bg-slate-50 flex flex-col h-full relative overflow-hidden">
+            <!-- Tabs & Toolbar -->
+            <div class="bg-white border-b border-slate-200 px-4 flex items-center justify-between h-12 shrink-0">
+                <div class="flex items-center gap-6 h-full">
+                    <button id="tabResult" class="h-full border-b-2 border-brand-600 text-brand-600 text-sm font-medium px-2 transition-colors flex items-center gap-2" onclick="app.switchTab('result')">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                        作業區 (Markdown Editor)
+                    </button>
+                    <button id="tabPreview" class="h-full border-b-2 border-transparent text-slate-500 hover:text-slate-700 text-sm font-medium px-2 transition-colors flex items-center gap-2" onclick="app.switchTab('preview')">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                        原始預覽
+                    </button>
+                </div>
+                
+                <div class="flex items-center gap-3">
+                    <span id="wordCount" class="text-xs text-slate-400 font-mono">0 字元</span>
+                    <!-- Edit Mode Indicator (Visible when editing) -->
+                    <span id="editIndicator" class="hidden text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-100 flex items-center gap-1">
+                        <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span> 手動編輯中
+                    </span>
+                </div>
+            </div>
+
+
+            <!-- Content Area -->
+            <div class="flex-1 relative group">
+                <!-- Loading Overlay -->
+                <div id="loading" class="hidden absolute inset-0 bg-white/80 backdrop-blur-sm z-30 flex items-center justify-center">
+                    <div class="flex flex-col items-center">
+                        <svg class="animate-spin h-8 w-8 text-brand-600 mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                        <span class="text-sm font-medium text-slate-600">正在智慧清洗...</span>
+                    </div>
+                </div>
+
+
+                <!-- Markdown Editor (Now Editable) -->
+                <div id="viewResult" class="absolute inset-0 p-6 overflow-auto custom-scrollbar">
+                    <textarea 
+                        id="outputArea" 
+                        class="w-full h-full bg-white border border-slate-200 rounded-lg p-6 font-mono text-sm leading-relaxed text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-500/50 focus:border-brand-500 transition-all resize-none placeholder-slate-300" 
+                        placeholder="等待檔案匯入... (匯入後可在此直接編輯內容)"
+                    ></textarea>
+                </div>
+
+
+                <!-- HTML Preview -->
+                <div id="viewPreview" class="absolute inset-0 hidden bg-white">
+                    <iframe id="previewFrame" class="preview-iframe" sandbox="allow-same-origin"></iframe>
+                </div>
+            </div>
+        </section>
+    </main>
+
+
+    <script>
+        /**
+         * Force AI知識轉譯工具 v1.0
+         * - Added JSZip for compression
+         * - Enhanced "Restore Sync" logic
+         * - Added Help Modal
+         */
+        const app = {
+            state: {
+                file: null,
+                rawHtml: '',
+                parsedBody: '', // The Cleaned DOM structure (Source of Truth for Reset)
+                metadata: { title: '', date: '', tags: '', notes: '' },
+                finalOutput: '', 
+                isManualEdit: false
+            },
+
+
+            init() {
+                this.els = {
+                    appBody: document.getElementById('appBody'),
+                    fileInput: document.getElementById('fileInput'),
+                    dropZone: document.getElementById('dropZone'),
+                    fileInfo: document.getElementById('fileInfo'),
+                    fileNameDisplay: document.getElementById('fileNameDisplay'),
+                    metaSection: document.getElementById('metaSection'),
+                    exportSection: document.getElementById('exportSection'),
+                    outputArea: document.getElementById('outputArea'),
+                    previewFrame: document.getElementById('previewFrame'),
+                    loading: document.getElementById('loading'),
+                    metaInputs: ['metaTitle', 'metaDate', 'metaTags', 'metaNotes'],
+                    wordCount: document.getElementById('wordCount'),
+                    syncStatus: document.getElementById('syncStatus'),
+                    manualModeOverlay: document.getElementById('manualModeOverlay'),
+                    editIndicator: document.getElementById('editIndicator'),
+                    helpModal: document.getElementById('helpModal')
+                };
+
+
+                // Listeners
+                this.els.fileInput.addEventListener('change', (e) => this.handleFile(e.target.files[0]));
+                
+                this.els.metaInputs.forEach(id => {
+                    document.getElementById(id).addEventListener('input', () => {
+                        if (!this.state.isManualEdit) this.updateOutput(false);
+                    });
+                });
+
+
+                // Detect Manual Edits
+                this.els.outputArea.addEventListener('input', (e) => {
+                    this.state.finalOutput = e.target.value;
+                    this.updateWordCount();
+                    if (!this.state.isManualEdit && this.state.file) {
+                        this.setManualMode(true);
+                    }
+                });
+
+
+                document.getElementById('metaDate').valueAsDate = new Date();
+                
+                // Drag & Drop
+                ['dragenter', 'dragover'].forEach(evt => {
+                    this.els.dropZone.addEventListener(evt, (e) => {
+                        e.preventDefault();
+                        this.els.dropZone.classList.add('border-brand-500', 'bg-brand-50');
+                    });
+                });
+                ['dragleave', 'drop'].forEach(evt => {
+                    this.els.dropZone.addEventListener(evt, (e) => {
+                        e.preventDefault();
+                        this.els.dropZone.classList.remove('border-brand-500', 'bg-brand-50');
+                    });
+                });
+                this.els.dropZone.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    this.els.dropZone.classList.remove('border-brand-500', 'bg-brand-50');
+                    if (e.dataTransfer.files[0]) this.handleFile(e.dataTransfer.files[0]);
+                });
+            },
+
+
+            toggleHelp() {
+                this.els.helpModal.classList.toggle('hidden');
+            },
+
+
+            setManualMode(isManual) {
+                this.state.isManualEdit = isManual;
+                if (isManual) {
+                    this.els.appBody.classList.remove('mode-sync');
+                    this.els.appBody.classList.add('mode-manual');
+                    this.els.syncStatus.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-amber-500 status-dot"></span>手動編輯中`;
+                    this.els.syncStatus.className = "flex items-center gap-1.5 text-[10px] font-medium text-amber-600 px-2 py-1 bg-amber-50 rounded-full border border-amber-100";
+                    
+                    this.els.manualModeOverlay.classList.remove('hidden');
+                    this.els.editIndicator.classList.remove('hidden');
+                } else {
+                    this.els.appBody.classList.remove('mode-manual');
+                    this.els.appBody.classList.add('mode-sync');
+                    this.els.syncStatus.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-green-500 status-dot"></span>自動同步中`;
+                    this.els.syncStatus.className = "flex items-center gap-1.5 text-[10px] font-medium text-green-600 px-2 py-1 bg-green-50 rounded-full border border-green-100";
+                    
+                    this.els.manualModeOverlay.classList.add('hidden');
+                    this.els.editIndicator.classList.add('hidden');
+                }
+            },
+
+
+            restoreSync() {
+                if(confirm('確定要恢復自動同步嗎？\n這將會遺失您剛才手動編輯的內容，並重置為自動清洗結果。')) {
+                    // Logic fix: Force visual update immediately
+                    this.setManualMode(false);
+                    this.updateOutput(true); // true forces regeneration from parsedBody
+                }
+            },
+
+
+            async handleFile(file) {
+                if (!file) return;
+                
+                const ext = file.name.split('.').pop().toLowerCase();
+                if (!['mhtml', 'mht', 'html', 'htm'].includes(ext)) {
+                    alert('不支援的檔案格式。請上傳 .mhtml, .mht, .html 或 .htm');
+                    return;
+                }
+
+
+                this.state.file = file;
+                this.els.loading.classList.remove('hidden');
+                
+                this.els.fileNameDisplay.textContent = file.name;
+                this.els.fileInfo.classList.remove('hidden');
+                document.getElementById('metaTitle').value = file.name.replace(/\.[^/.]+$/, "");
+                
+                this.setManualMode(false);
+
+
+                // Delay to allow UI render
+                setTimeout(() => {
+                    const reader = new FileReader();
+                    reader.onload = (e) => this.processContent(e.target.result, ext);
+                    reader.readAsText(file); // Read as text for parsing
+                }, 100);
+            },
+
+
+            processContent(content, ext) {
+                try {
+                    let htmlContent = '';
+                    if (ext === 'mhtml' || ext === 'mht') {
+                        htmlContent = this.extractHtmlFromMhtml(content);
+                    } else {
+                        htmlContent = content;
+                    }
+
+
+                    this.state.rawHtml = htmlContent;
+                    this.els.previewFrame.srcdoc = htmlContent;
+
+
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(htmlContent, 'text/html');
+                    
+                    ['script', 'style', 'noscript', 'meta', 'link', 'svg', 'iframe'].forEach(tag => {
+                        doc.querySelectorAll(tag).forEach(el => el.remove());
+                    });
+
+
+                    // Normalize line breaks
+                    this.state.parsedBody = this.domToMarkdown(doc.body).replace(/\n{3,}/g, '\n\n').trim();
+
+
+                    this.els.metaSection.classList.remove('opacity-50', 'pointer-events-none');
+                    this.els.exportSection.classList.remove('opacity-50', 'pointer-events-none');
+                    this.els.loading.classList.add('hidden');
+
+
+                    this.updateOutput(true);
+
+
+                } catch (err) {
+                    console.error(err);
+                    alert('解析失敗：' + err.message);
+                    this.els.loading.classList.add('hidden');
+                }
+            },
+
+
+            updateOutput(regenerate) {
+                // If in manual mode and not forced regeneration, do nothing
+                if (this.state.isManualEdit && !regenerate) return;
+
+
+                this.state.metadata = {
+                    title: document.getElementById('metaTitle').value || 'Untitled',
+                    date: document.getElementById('metaDate').value,
+                    tags: document.getElementById('metaTags').value,
+                    notes: document.getElementById('metaNotes').value
+                };
+
+
+                const header = [
+                    `# ${this.state.metadata.title}`,
+                    `> Date: ${this.state.metadata.date}`,
+                    this.state.metadata.tags ? `> Tags: ${this.state.metadata.tags}` : null,
+                    this.state.metadata.notes ? `> Note: ${this.state.metadata.notes}` : null,
+                    `> Copyright: Force Cheng x 宏大職訓2025產業新尖兵課程`,
+                    `\n---\n`
+                ].filter(Boolean).join('\n');
+
+
+                this.state.finalOutput = header + this.state.parsedBody;
+                this.els.outputArea.value = this.state.finalOutput;
+                this.updateWordCount();
+            },
+            
+            updateWordCount() {
+                this.els.wordCount.textContent = `${this.state.finalOutput.length} 字元`;
+            },
+
+
+            download(format) {
+                if (!this.state.file) {
+                    alert('請先匯入檔案');
+                    return;
+                }
+
+
+                let content = '';
+                let mimeType = '';
+                let ext = '';
+                let blob = null;
+
+
+                if (format === 'zip') {
+                    // ZIP Logic using JSZip
+                    const zip = new JSZip();
+                    // Add the ORIGINAL file
+                    zip.file(this.state.file.name, this.state.file);
+                    // Add the Parsed Markdown as well (bonus)
+                    zip.file(`${this.state.metadata.title || 'cleaned'}.md`, this.state.finalOutput);
+                    
+                    zip.generateAsync({type:"blob"}).then((content) => {
+                        const url = URL.createObjectURL(content);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `${this.state.metadata.title || 'backup'}.zip`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                    });
+                    return; // Exit here for zip
+                }
+
+
+                switch (format) {
+                    case 'json':
+                        content = JSON.stringify({
+                            metadata: { ...this.state.metadata, copyright: 'Force Cheng 2025' },
+                            content: this.state.finalOutput,
+                            source: this.state.file?.name
+                        }, null, 2);
+                        mimeType = 'application/json';
+                        ext = 'json';
+                        break;
+                    case 'md':
+                        content = this.state.finalOutput;
+                        mimeType = 'text/markdown';
+                        ext = 'md';
+                        break;
+                    case 'txt':
+                        content = this.state.finalOutput;
+                        mimeType = 'text/plain';
+                        ext = 'txt';
+                        break;
+                }
+
+
+                blob = new Blob([content], { type: mimeType });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${this.state.metadata.title || 'export'}.${ext}`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            },
+
+
+            // --- Logic Helpers ---
+            decodeQuotedPrintable(str) {
+                const cleanStr = str.replace(/=\r?\n/g, '');
+                const bytes = [];
+                for (let i = 0; i < cleanStr.length; i++) {
+                    const char = cleanStr[i];
+                    if (char === '=') {
+                        const hex = cleanStr.substr(i + 1, 2);
+                        if (/^[0-9A-F]{2}$/i.test(hex)) {
+                            bytes.push(parseInt(hex, 16));
+                            i += 2;
+                        } else {
+                            bytes.push(61);
+                        }
+                    } else {
+                        bytes.push(char.charCodeAt(0));
+                    }
+                }
+                try {
+                    return new TextDecoder('utf-8').decode(new Uint8Array(bytes));
+                } catch (e) { return cleanStr; }
+            },
+
+
+            extractHtmlFromMhtml(content) {
+                const boundaryMatch = content.match(/boundary="(.+?)"/i) || content.match(/boundary=([^\s;]+)/i);
+                if (!boundaryMatch) throw new Error("無效的 MHTML 格式");
+                const boundary = boundaryMatch[1];
+                const parts = content.split(`--${boundary}`);
+                for (const part of parts) {
+                    if (part.includes('Content-Type: text/html')) {
+                        const bodyIndex = part.indexOf('\r\n\r\n');
+                        const splitIndex = bodyIndex !== -1 ? bodyIndex : part.indexOf('\n\n');
+                        if (splitIndex === -1) continue;
+                        const headerPart = part.substring(0, splitIndex);
+                        let bodyPart = part.substring(splitIndex + (bodyIndex !== -1 ? 4 : 2));
+                        if (headerPart.includes('Content-Transfer-Encoding: quoted-printable')) {
+                            bodyPart = this.decodeQuotedPrintable(bodyPart);
+                        } else if (headerPart.includes('Content-Transfer-Encoding: base64')) {
+                            try {
+                                bodyPart = new TextDecoder('utf-8').decode(Uint8Array.from(atob(bodyPart.replace(/\s/g, '')), c => c.charCodeAt(0)));
+                            } catch (e) {}
+                        }
+                        return bodyPart;
+                    }
+                }
+                throw new Error("找不到 HTML 內容");
+            },
+
+
+            domToMarkdown(node) {
+                if (node.nodeType === Node.TEXT_NODE) return node.textContent.replace(/\s+/g, ' ');
+                if (node.nodeType !== Node.ELEMENT_NODE) return '';
+                const tagName = node.tagName.toLowerCase();
+                if (['script', 'style', 'noscript', 'meta'].includes(tagName)) return '';
+                let content = Array.from(node.childNodes).map(n => this.domToMarkdown(n)).join('');
+                switch (tagName) {
+                    case 'h1': return `\n# ${content}\n`;
+                    case 'h2': return `\n## ${content}\n`;
+                    case 'h3': return `\n### ${content}\n`;
+                    case 'p': return `\n${content}\n`;
+                    case 'div': return `\n${content}\n`;
+                    case 'br': return '\n';
+                    case 'ul': return `\n${content}\n`;
+                    case 'ol': return `\n${content}\n`;
+                    case 'li': return `- ${content.trim()}\n`;
+                    case 'b': case 'strong': return `**${content}**`;
+                    case 'i': case 'em': return `*${content}*`;
+                    case 'pre': return `\n\`\`\`\n${content}\n\`\`\`\n`;
+                    case 'code': return `\`${content}\``;
+                    case 'a': return `[${content}](${node.getAttribute('href') || '#'})`;
+                    case 'img': return `[Image: ${node.getAttribute('alt') || 'image'}]`;
+                    case 'tr': return `| ${content} |\n`;
+                    case 'td': case 'th': return `${content} |`;
+                    default: return content;
+                }
+            }
+        };
+
+
+        app.init();
+    </script>
+</body>
+</html>
