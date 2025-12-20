@@ -1,9 +1,9 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Force AI知識轉譯工具 v1.0</title>
+    <title>Force AI知識轉譯工具 v1.6 Test</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- 引入 JSZip 用於壓縮檔案 -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
@@ -32,19 +32,31 @@
         .mode-sync .status-dot { background-color: #22c55e; box-shadow: 0 0 8px rgba(34, 197, 94, 0.4); }
         .mode-manual .status-dot { background-color: #f59e0b; box-shadow: 0 0 8px rgba(245, 158, 11, 0.4); }
         .mode-manual .meta-input { opacity: 0.5; pointer-events: none; background-color: #f8fafc; }
+
+        /* Source Tab Active State */
+        .source-tab-active { background-color: #e0f2fe; color: #0284c7; border-color: #0284c7; }
+        .source-tab-inactive { background-color: white; color: #64748b; border-color: #e2e8f0; }
+        /* JSON Tab Specific */
+        .source-tab-json-active { background-color: #ecfdf5; color: #059669; border-color: #059669; }
+
+        /* Floating Agent Button Animation */
+        @keyframes bounce-slow {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-5px); }
+        }
+        .agent-float { animation: bounce-slow 3s infinite ease-in-out; }
     </style>
 </head>
 <body class="bg-slate-100 text-slate-800 h-screen flex flex-col overflow-hidden mode-sync" id="appBody">
-
 
     <!-- Top Navigation -->
     <nav class="bg-white border-b border-slate-200 h-16 flex items-center justify-between px-6 shrink-0 z-20 shadow-sm">
         <div class="flex items-center gap-4">
             <div class="w-9 h-9 bg-brand-600 rounded-lg flex items-center justify-center text-white font-bold text-xl shadow-md bg-gradient-to-br from-brand-500 to-brand-700">F</div>
             <div class="flex flex-col">
-                <h1 class="font-bold text-lg text-slate-800 leading-none tracking-tight">Force AI知識轉譯工具 <span class="text-xs font-normal text-brand-600 bg-brand-50 px-1.5 py-0.5 rounded border border-brand-100 ml-1">v1.0</span></h1>
+                <h1 class="font-bold text-lg text-slate-800 leading-none tracking-tight">Force AI知識轉譯工具 <span class="text-xs font-normal text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded border border-amber-200 ml-1">v1.6 Test</span></h1>
                 <p class="text-[11px] text-slate-500 font-medium mt-1 tracking-wide">
-                    Force Cheng x 宏大職訓2025產業新尖兵課程
+                    update: 2025/12/20 | Force Cheng x 宏大職訓2025產業新尖兵課程
                 </p>
             </div>
         </div>
@@ -60,11 +72,10 @@
         </div>
     </nav>
 
-
     <!-- Main Workspace -->
     <main class="flex-1 flex flex-col lg:flex-row overflow-hidden relative">
         
-        <!-- Instructions Modal (Hidden by default) -->
+        <!-- Instructions Modal -->
         <div id="helpModal" class="hidden absolute inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
             <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto custom-scrollbar flex flex-col">
                 <div class="p-6 border-b border-slate-100 flex justify-between items-center sticky top-0 bg-white z-10">
@@ -83,7 +94,7 @@
                         <div>
                             <h3 class="font-bold text-slate-800 mb-1">匯入原始檔案</h3>
                             <p class="text-sm text-slate-600 leading-relaxed">
-                                支援 <strong>.mhtml</strong> (網頁封存) 與 <strong>.html</strong> 格式。工具會自動移除網頁中的廣告、選單、與程式碼雜訊，僅保留對話或文章核心內容。
+                                支援 <strong>.mhtml</strong>, <strong>.html</strong>。或使用 <span class="text-emerald-600 font-bold">JSON 閱讀器 (New v1.5)</span> 還原舊專案。
                             </p>
                         </div>
                     </div>
@@ -91,35 +102,19 @@
                     <div class="flex gap-4">
                         <div class="w-8 h-8 rounded-full bg-brand-100 text-brand-600 font-bold flex items-center justify-center shrink-0">2</div>
                         <div>
-                            <h3 class="font-bold text-slate-800 mb-1">補充專案資訊 (Metadata)</h3>
+                            <h3 class="font-bold text-slate-800 mb-1">補充專案資訊</h3>
                             <p class="text-sm text-slate-600 leading-relaxed">
-                                在左側面板填寫標題、日期與備註。這些資訊會自動生成為文件檔頭 (Frontmatter)，幫助 AI 更快理解上下文。
-                                <br><span class="text-xs text-brand-600 bg-brand-50 px-1 rounded mt-1 inline-block">Tips: 左側修改會即時同步到右側預覽區。</span>
+                                填寫標題、日期、備註與 Memo。
                             </p>
                         </div>
                     </div>
-                    <!-- Step 3 -->
-                    <div class="flex gap-4">
+                     <!-- Step 3 -->
+                     <div class="flex gap-4">
                         <div class="w-8 h-8 rounded-full bg-brand-100 text-brand-600 font-bold flex items-center justify-center shrink-0">3</div>
                         <div>
-                            <h3 class="font-bold text-slate-800 mb-1">人工校對 (Human-in-the-loop)</h3>
+                            <h3 class="font-bold text-slate-800 mb-1">匯出</h3>
                             <p class="text-sm text-slate-600 leading-relaxed">
-                                在右側「作業區」可以直接編輯文字。一旦開始打字，系統會進入<strong>手動編輯模式</strong>，鎖定左側同步功能以保護您的修改。若需重置，點擊左側黃色提示區的「恢復自動同步」。
-                            </p>
-                        </div>
-                    </div>
-                    <!-- Step 4 -->
-                    <div class="flex gap-4">
-                        <div class="w-8 h-8 rounded-full bg-brand-100 text-brand-600 font-bold flex items-center justify-center shrink-0">4</div>
-                        <div>
-                            <h3 class="font-bold text-slate-800 mb-1">匯出知識庫</h3>
-                            <p class="text-sm text-slate-600 leading-relaxed">
-                                支援多種格式匯出：
-                                <ul class="list-disc pl-5 mt-1 space-y-1 text-slate-500">
-                                    <li><strong>Markdown</strong>: 適合 AI 讀取或 Obsidian 筆記。</li>
-                                    <li><strong>JSON</strong>: 適合透過 API 傳送到 Google Sheets (GAS)。</li>
-                                    <li><strong>ZIP</strong>: 將原始 MHTML/HTML 檔案壓縮打包，方便繳交作業。</li>
-                                </ul>
+                                推薦使用 <strong>ZIP</strong> 打包，包含 JSON 原始檔以便日後還原。
                             </p>
                         </div>
                     </div>
@@ -132,32 +127,99 @@
             </div>
         </div>
 
-
         <!-- Left Panel: Controls & Input -->
         <aside class="w-full lg:w-[400px] bg-white border-r border-slate-200 flex flex-col h-full overflow-y-auto custom-scrollbar z-10 shadow-lg lg:shadow-none relative">
             
             <div class="p-6 space-y-8 flex-1">
-                <!-- 1. File Upload Section -->
+                <!-- 1. File Source Section -->
                 <section>
                     <h2 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">1. 檔案來源</h2>
-                    <div id="dropZone" class="border-2 border-dashed border-slate-300 rounded-xl bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer group relative overflow-hidden">
-                        <input type="file" id="fileInput" class="absolute inset-0 opacity-0 cursor-pointer z-10" accept=".mhtml,.mht,.html,.htm">
-                        <div class="p-8 flex flex-col items-center justify-center text-center">
-                            <div class="w-12 h-12 bg-white border border-slate-200 rounded-full flex items-center justify-center mb-3 shadow-sm group-hover:scale-110 transition-transform">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-brand-600"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                    
+                    <!-- Source Tabs (Updated for 3 Tabs) -->
+                    <div class="grid grid-cols-3 gap-1 mb-3">
+                        <button onclick="app.switchSourceTab('upload')" id="tabBtnUpload" class="source-tab-active px-2 py-2 text-[11px] font-bold border rounded-lg transition-all flex flex-col items-center justify-center gap-1">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                            上傳檔案
+                        </button>
+                        <button onclick="app.switchSourceTab('paste')" id="tabBtnPaste" class="source-tab-inactive px-2 py-2 text-[11px] font-bold border rounded-lg transition-all flex flex-col items-center justify-center gap-1">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
+                            貼上 HTML
+                        </button>
+                        <button onclick="app.switchSourceTab('json')" id="tabBtnJson" class="source-tab-inactive px-2 py-2 text-[11px] font-bold border rounded-lg transition-all flex flex-col items-center justify-center gap-1">
+                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                            JSON 讀取
+                        </button>
+                    </div>
+
+                    <!-- Content: Upload Mode -->
+                    <div id="sourceContentUpload" class="block">
+                        <div id="dropZone" class="border-2 border-dashed border-slate-300 rounded-xl bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer group relative overflow-hidden min-h-[160px]">
+                            <input type="file" id="fileInput" class="absolute inset-0 opacity-0 cursor-pointer z-10" accept=".mhtml,.mht,.html,.htm">
+                            <div class="p-6 flex flex-col items-center justify-center text-center h-full">
+                                <div class="w-12 h-12 bg-white border border-slate-200 rounded-full flex items-center justify-center mb-3 shadow-sm group-hover:scale-110 transition-transform">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-brand-600"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                                </div>
+                                <p class="font-medium text-slate-700 text-sm">點擊或拖放檔案</p>
+                                <p class="text-xs text-slate-500 mt-1">支援 .mhtml, .html</p>
                             </div>
-                            <p class="font-medium text-slate-700">點擊或拖放檔案</p>
-                            <p class="text-xs text-slate-500 mt-1">支援 .mhtml, .html (完整/單一)</p>
-                        </div>
-                        <!-- Success State -->
-                        <div id="fileInfo" class="hidden absolute inset-0 bg-brand-50 flex flex-col items-center justify-center z-20 pointer-events-none">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-brand-600 mb-2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
-                            <span id="fileNameDisplay" class="font-medium text-brand-900 text-sm px-4 truncate w-full text-center">filename.mhtml</span>
-                            <span class="text-xs text-brand-600 mt-1">點擊以更換</span>
+                            <!-- Success State -->
+                            <div id="fileInfo" class="hidden absolute inset-0 bg-brand-50 flex flex-col items-center justify-center z-20 pointer-events-none">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-brand-600 mb-2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+                                <span id="fileNameDisplay" class="font-medium text-brand-900 text-sm px-4 truncate w-full text-center">filename.mhtml</span>
+                                <span class="text-xs text-brand-600 mt-1">點擊以更換</span>
+                            </div>
                         </div>
                     </div>
-                </section>
 
+                    <!-- Content: Paste Mode -->
+                    <div id="sourceContentPaste" class="hidden space-y-3">
+                        <div>
+                            <input type="text" id="pasteFileName" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 placeholder-slate-400" placeholder="預設: code-YYYYMMDD-HHMM.html">
+                        </div>
+                        <div>
+                            <textarea id="pasteContent" rows="8" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-mono focus:outline-none focus:ring-2 focus:ring-brand-500 placeholder-slate-400 resize-none custom-scrollbar" placeholder="在此貼上程式碼或文字..."></textarea>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2">
+                            <button onclick="app.handlePasteAction('import')" class="bg-brand-600 text-white px-3 py-2 rounded-lg text-xs font-bold hover:bg-brand-700 transition-colors">
+                                轉存並匯入
+                            </button>
+                            <button onclick="app.handlePasteAction('download')" class="bg-white border border-slate-300 text-slate-700 px-3 py-2 rounded-lg text-xs font-bold hover:bg-slate-50 transition-colors">
+                                下載 .html
+                            </button>
+                        </div>
+                    </div>
+
+                     <!-- Content: JSON Reader Mode (NEW) -->
+                     <div id="sourceContentJson" class="hidden space-y-3">
+                        <div class="relative group">
+                            <textarea id="jsonContent" rows="6" class="w-full px-3 py-2 bg-emerald-50/30 border border-emerald-200 rounded-lg text-xs font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder-emerald-400 resize-none custom-scrollbar" placeholder="{ 'metadata': ... } 請在此貼上 JSON 備份檔內容，或點擊下方按鈕上傳"></textarea>
+                        </div>
+                        
+                        <div class="flex gap-2">
+                             <label class="flex-1 bg-white border border-dashed border-emerald-300 text-emerald-600 px-3 py-2 rounded-lg text-xs font-bold hover:bg-emerald-50 transition-colors cursor-pointer flex items-center justify-center gap-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                                讀取 .json 檔
+                                <input type="file" id="jsonFileInput" class="hidden" accept=".json">
+                            </label>
+                            <button onclick="app.handleJsonImport()" class="flex-1 bg-emerald-600 text-white px-3 py-2 rounded-lg text-xs font-bold hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                                解析並填入
+                            </button>
+                        </div>
+                        
+                        <!-- JSON Preview Area -->
+                        <div id="jsonPreview" class="hidden p-3 bg-white border border-emerald-100 rounded-lg space-y-2">
+                            <h4 class="text-xs font-bold text-emerald-700 border-b border-emerald-50 pb-1 mb-1">預覽偵測資料</h4>
+                            <div class="grid grid-cols-2 gap-2 text-[10px] text-slate-500">
+                                <div>標題: <span id="jpTitle" class="font-medium text-slate-700">---</span></div>
+                                <div>日期: <span id="jpDate" class="font-medium text-slate-700">---</span></div>
+                                <div>長度: <span id="jpLen" class="font-medium text-slate-700">---</span></div>
+                                <div>Memo: <span id="jpMemo" class="font-medium text-slate-700">無</span></div>
+                            </div>
+                        </div>
+                    </div>
+
+                </section>
 
                 <!-- 2. Metadata Section -->
                 <section id="metaSection" class="opacity-50 pointer-events-none transition-opacity duration-300 relative">
@@ -183,7 +245,6 @@
                         </button>
                     </div>
 
-
                     <div class="space-y-4">
                         <div>
                             <label class="block text-sm font-medium text-slate-700 mb-1">文件標題</label>
@@ -201,51 +262,63 @@
                             </div>
                         </div>
 
-
                         <div>
                             <label class="block text-sm font-medium text-slate-700 mb-1">備註說明</label>
                             <textarea id="metaNotes" rows="3" class="meta-input w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none" placeholder="補充上下文，以便 AI 理解..."></textarea>
                         </div>
+
+                        <!-- NEW: Memo Field (v1.4) -->
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1 text-amber-700 flex justify-between">
+                                <span>附加說明檔 (Memo)</span>
+                            </label>
+                            <textarea id="metaMemo" rows="4" class="meta-input w-full px-3 py-2 bg-amber-50/50 border border-amber-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 resize-none placeholder-amber-400/50 text-slate-700" placeholder="獨立的 Prompt 或筆記。下載 ZIP 或點擊下方橙色按鈕可獨立匯出。"></textarea>
+                        </div>
                     </div>
                 </section>
 
-
-                <!-- 3. Export Section -->
+                <!-- 3. Export Section (Revised for v1.4) -->
                 <section id="exportSection" class="opacity-50 pointer-events-none transition-opacity duration-300 pb-8">
                     <h2 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">3. 匯出/備份</h2>
-                    <div class="grid grid-cols-2 gap-3 mb-3">
-                        <button onclick="app.download('md')" class="flex items-center justify-center gap-2 p-2.5 border border-slate-200 rounded-lg bg-white hover:bg-slate-50 hover:border-brand-300 hover:text-brand-600 hover:shadow-sm transition-all group text-left">
+                    
+                    <!-- Row 1: Standard Exports (White) -->
+                    <div class="grid grid-cols-3 gap-2 mb-3">
+                        <button onclick="app.download('md')" class="flex flex-col items-center justify-center p-2 border border-slate-200 rounded-lg bg-white hover:bg-slate-50 hover:border-brand-300 hover:text-brand-600 hover:shadow-sm transition-all group">
                             <span class="text-xs font-bold text-slate-700 group-hover:text-brand-600">Markdown</span>
-                            <span class="text-[10px] text-slate-400 bg-slate-100 px-1 rounded">AI</span>
+                            <span class="text-[9px] text-slate-400 mt-0.5">主文件</span>
                         </button>
-                        <button onclick="app.download('json')" class="flex items-center justify-center gap-2 p-2.5 border border-slate-200 rounded-lg bg-white hover:bg-slate-50 hover:border-brand-300 hover:text-brand-600 hover:shadow-sm transition-all group text-left">
+                        <button onclick="app.download('json')" class="flex flex-col items-center justify-center p-2 border border-slate-200 rounded-lg bg-white hover:bg-slate-50 hover:border-brand-300 hover:text-brand-600 hover:shadow-sm transition-all group">
                             <span class="text-xs font-bold text-slate-700 group-hover:text-brand-600">JSON</span>
-                            <span class="text-[10px] text-slate-400 bg-slate-100 px-1 rounded">API</span>
+                            <span class="text-[9px] text-slate-400 mt-0.5">資料庫</span>
                         </button>
-                    </div>
-                    <div class="grid grid-cols-2 gap-3">
-                        <button onclick="app.download('txt')" class="flex items-center justify-center gap-2 p-2.5 border border-slate-200 rounded-lg bg-white hover:bg-slate-50 hover:border-brand-300 hover:text-brand-600 hover:shadow-sm transition-all group text-left">
+                        <button onclick="app.download('txt')" class="flex flex-col items-center justify-center p-2 border border-slate-200 rounded-lg bg-white hover:bg-slate-50 hover:border-brand-300 hover:text-brand-600 hover:shadow-sm transition-all group">
                             <span class="text-xs font-bold text-slate-700 group-hover:text-brand-600">Text</span>
-                            <span class="text-[10px] text-slate-400 bg-slate-100 px-1 rounded">純文字</span>
-                        </button>
-                        <button onclick="app.download('zip')" class="flex items-center justify-center gap-2 p-2.5 border border-slate-200 rounded-lg bg-white hover:bg-slate-50 hover:border-brand-300 hover:text-brand-600 hover:shadow-sm transition-all group text-left">
-                            <span class="text-xs font-bold text-slate-700 group-hover:text-brand-600">ZIP</span>
-                            <span class="text-[10px] text-slate-400 bg-slate-100 px-1 rounded">原始檔</span>
+                            <span class="text-[9px] text-slate-400 mt-0.5">純文字</span>
                         </button>
                     </div>
+
+                    <!-- Row 2: Memo Download (Amber) -->
+                    <button onclick="app.download('memo')" class="w-full flex items-center justify-center gap-2 p-2 mb-3 border border-amber-200 bg-amber-50 rounded-lg text-amber-800 font-bold text-xs hover:bg-amber-100 hover:shadow-sm transition-all">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                        下載附加說明檔 (Memo)
+                    </button>
+
+                    <!-- Row 3: ZIP Package (Indigo/Dark) -->
+                    <button onclick="app.download('zip')" class="w-full flex items-center justify-center gap-2 p-2.5 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 hover:shadow-md transition-all">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        下載完整專案包 (ZIP)
+                    </button>
                 </section>
             </div>
-
 
             <!-- Footer with Copyright -->
             <footer class="p-4 border-t border-slate-100 bg-slate-50 text-center">
                 <p class="text-[10px] text-slate-400 font-mono leading-tight">
-                    &copy; Force Cheng 2025/12/18<br>
-                    Force AI知識轉譯工具 v1.0
+                    &copy; Force Cheng 2025/12/20<br>
+                    Force AI知識轉譯工具 v1.6 Test
                 </p>
             </footer>
         </aside>
-
 
         <!-- Right Panel: Preview (Main content) -->
         <section class="flex-1 bg-slate-50 flex flex-col h-full relative overflow-hidden">
@@ -271,7 +344,6 @@
                 </div>
             </div>
 
-
             <!-- Content Area -->
             <div class="flex-1 relative group">
                 <!-- Loading Overlay -->
@@ -282,7 +354,6 @@
                     </div>
                 </div>
 
-
                 <!-- Markdown Editor (Now Editable) -->
                 <div id="viewResult" class="absolute inset-0 p-6 overflow-auto custom-scrollbar">
                     <textarea 
@@ -292,7 +363,6 @@
                     ></textarea>
                 </div>
 
-
                 <!-- HTML Preview -->
                 <div id="viewPreview" class="absolute inset-0 hidden bg-white">
                     <iframe id="previewFrame" class="preview-iframe" sandbox="allow-same-origin"></iframe>
@@ -301,29 +371,42 @@
         </section>
     </main>
 
+    <!-- Agent 小天使 Button -->
+    <div class="fixed bottom-6 right-6 z-50 group agent-float">
+        <button onclick="app.openAgentWindow()" class="bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white p-4 rounded-full shadow-lg hover:shadow-xl transition-all transform hover:scale-105 flex items-center justify-center relative border-2 border-white/20">
+            <!-- Icon -->
+            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2c-5.5 0-10 4.5-10 10 0 5.5 4.5 10 10 10s10-4.5 10-10c0-5.5-4.5-10-10-10z"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
+            <!-- Tooltip/Label -->
+            <span class="absolute right-full mr-3 bg-slate-800 text-white text-xs font-bold px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap shadow-md">
+                Agent 小天使
+                <span class="absolute right-[-4px] top-1/2 -translate-y-1/2 w-0 h-0 border-t-[4px] border-t-transparent border-l-[4px] border-l-slate-800 border-b-[4px] border-b-transparent"></span>
+            </span>
+        </button>
+    </div>
 
     <script>
         /**
-         * Force AI知識轉譯工具 v1.0
-         * - Added JSZip for compression
-         * - Enhanced "Restore Sync" logic
-         * - Added Help Modal
+         * Force AI知識轉譯工具 v1.6 Test
+         * - Update: 2025/12/20
+         * - Add Tab 3: JSON Reader for restoring backup
+         * - Add Agent Angel Floating Button with updated link
          */
         const app = {
             state: {
                 file: null,
                 rawHtml: '',
-                parsedBody: '', // The Cleaned DOM structure (Source of Truth for Reset)
-                metadata: { title: '', date: '', tags: '', notes: '' },
+                parsedBody: '', 
+                metadata: { title: '', date: '', tags: '', notes: '', memo: '' },
                 finalOutput: '', 
-                isManualEdit: false
+                isManualEdit: false,
+                importedJson: null // Stores temp JSON data
             },
-
 
             init() {
                 this.els = {
                     appBody: document.getElementById('appBody'),
                     fileInput: document.getElementById('fileInput'),
+                    jsonFileInput: document.getElementById('jsonFileInput'), // New
                     dropZone: document.getElementById('dropZone'),
                     fileInfo: document.getElementById('fileInfo'),
                     fileNameDisplay: document.getElementById('fileNameDisplay'),
@@ -332,26 +415,46 @@
                     outputArea: document.getElementById('outputArea'),
                     previewFrame: document.getElementById('previewFrame'),
                     loading: document.getElementById('loading'),
-                    metaInputs: ['metaTitle', 'metaDate', 'metaTags', 'metaNotes'],
+                    metaInputs: ['metaTitle', 'metaDate', 'metaTags', 'metaNotes', 'metaMemo'],
                     wordCount: document.getElementById('wordCount'),
                     syncStatus: document.getElementById('syncStatus'),
                     manualModeOverlay: document.getElementById('manualModeOverlay'),
                     editIndicator: document.getElementById('editIndicator'),
-                    helpModal: document.getElementById('helpModal')
+                    helpModal: document.getElementById('helpModal'),
+                    
+                    // Source Tabs
+                    tabBtnUpload: document.getElementById('tabBtnUpload'),
+                    tabBtnPaste: document.getElementById('tabBtnPaste'),
+                    tabBtnJson: document.getElementById('tabBtnJson'), // New
+                    sourceContentUpload: document.getElementById('sourceContentUpload'),
+                    sourceContentPaste: document.getElementById('sourceContentPaste'),
+                    sourceContentJson: document.getElementById('sourceContentJson'), // New
+                    pasteFileName: document.getElementById('pasteFileName'),
+                    pasteContent: document.getElementById('pasteContent'),
+                    jsonContent: document.getElementById('jsonContent'), // New
+                    jsonPreview: document.getElementById('jsonPreview'), // New
+                    jpTitle: document.getElementById('jpTitle'),
+                    jpDate: document.getElementById('jpDate'),
+                    jpLen: document.getElementById('jpLen'),
+                    jpMemo: document.getElementById('jpMemo')
                 };
-
 
                 // Listeners
                 this.els.fileInput.addEventListener('change', (e) => this.handleFile(e.target.files[0]));
+                this.els.jsonFileInput.addEventListener('change', (e) => this.handleJsonFile(e.target.files[0])); // New
+
+                // Listener for JSON paste
+                this.els.jsonContent.addEventListener('input', (e) => this.previewJson(e.target.value));
                 
                 this.els.metaInputs.forEach(id => {
                     document.getElementById(id).addEventListener('input', () => {
                         if (!this.state.isManualEdit) this.updateOutput(false);
+                        else {
+                            this.state.metadata.memo = document.getElementById('metaMemo').value;
+                        }
                     });
                 });
 
-
-                // Detect Manual Edits
                 this.els.outputArea.addEventListener('input', (e) => {
                     this.state.finalOutput = e.target.value;
                     this.updateWordCount();
@@ -359,7 +462,6 @@
                         this.setManualMode(true);
                     }
                 });
-
 
                 document.getElementById('metaDate').valueAsDate = new Date();
                 
@@ -383,11 +485,207 @@
                 });
             },
 
+            // --- Agent Window Logic ---
+            openAgentWindow() {
+                const url = 'https://chatgpt.com/g/g-69469a87083c8191a679056e7a35c329-falo-ai-km-agent-zhi-shi-xiao-tian-shi';
+                const width = 400;
+                const height = 700;
+                const left = window.screen.width - width - 50; // Align to right
+                const top = 100;
+                
+                // Features for popup window (hide toolbars etc.)
+                const features = `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes,status=no,toolbar=no,menubar=no,location=no`;
+                
+                window.open(url, 'AgentAngel', features);
+            },
+
+            switchTab(mode) {
+                const btnResult = document.getElementById('tabResult');
+                const btnPreview = document.getElementById('tabPreview');
+                const viewResult = document.getElementById('viewResult');
+                const viewPreview = document.getElementById('viewPreview');
+
+                if (mode === 'result') {
+                    btnResult.classList.replace('text-slate-500', 'text-brand-600');
+                    btnResult.classList.replace('border-transparent', 'border-brand-600');
+                    btnPreview.classList.replace('text-brand-600', 'text-slate-500');
+                    btnPreview.classList.replace('border-brand-600', 'border-transparent');
+                    viewResult.classList.remove('hidden');
+                    viewPreview.classList.add('hidden');
+                } else {
+                    btnPreview.classList.replace('text-slate-500', 'text-brand-600');
+                    btnPreview.classList.replace('border-transparent', 'border-brand-600');
+                    btnResult.classList.replace('text-brand-600', 'text-slate-500');
+                    btnResult.classList.replace('border-brand-600', 'border-transparent');
+                    viewPreview.classList.remove('hidden');
+                    viewResult.classList.add('hidden');
+                }
+            },
+
+            switchSourceTab(mode) {
+                // Reset all
+                [this.els.tabBtnUpload, this.els.tabBtnPaste, this.els.tabBtnJson].forEach(el => {
+                    el.classList.remove('source-tab-active', 'source-tab-json-active');
+                    el.classList.add('source-tab-inactive');
+                });
+                [this.els.sourceContentUpload, this.els.sourceContentPaste, this.els.sourceContentJson].forEach(el => el.classList.add('hidden'));
+
+                if (mode === 'upload') {
+                    this.els.tabBtnUpload.classList.add('source-tab-active');
+                    this.els.tabBtnUpload.classList.remove('source-tab-inactive');
+                    this.els.sourceContentUpload.classList.remove('hidden');
+                } else if (mode === 'paste') {
+                    this.els.tabBtnPaste.classList.add('source-tab-active');
+                    this.els.tabBtnPaste.classList.remove('source-tab-inactive');
+                    this.els.sourceContentPaste.classList.remove('hidden');
+                    if (!this.els.pasteFileName.value) {
+                        this.els.pasteFileName.value = this.getTimestampFilename();
+                    }
+                } else if (mode === 'json') {
+                    this.els.tabBtnJson.classList.add('source-tab-json-active');
+                    this.els.tabBtnJson.classList.remove('source-tab-inactive');
+                    this.els.sourceContentJson.classList.remove('hidden');
+                }
+            },
+
+            // --- New JSON Logic ---
+            handleJsonFile(file) {
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const content = e.target.result;
+                    this.els.jsonContent.value = content;
+                    this.previewJson(content);
+                };
+                reader.readAsText(file);
+            },
+
+            previewJson(jsonStr) {
+                try {
+                    const data = JSON.parse(jsonStr);
+                    // Minimal validation
+                    if (!data.metadata && !data.content) throw new Error("Invalid structure");
+                    
+                    this.state.importedJson = data;
+                    this.els.jsonPreview.classList.remove('hidden');
+                    this.els.jpTitle.textContent = data.metadata?.title || '未命名';
+                    this.els.jpDate.textContent = data.metadata?.date || '---';
+                    this.els.jpMemo.textContent = data.metadata?.memo ? '有' : '無';
+                    this.els.jpLen.textContent = (data.content?.length || 0) + ' chars';
+                    
+                } catch (e) {
+                    this.state.importedJson = null;
+                    this.els.jsonPreview.classList.add('hidden');
+                }
+            },
+
+            handleJsonImport() {
+                if (!this.state.importedJson) {
+                    alert("請先輸入有效的 JSON 內容");
+                    return;
+                }
+                const data = this.state.importedJson;
+                
+                // 1. Populate Metadata Fields
+                if (data.metadata) {
+                    document.getElementById('metaTitle').value = data.metadata.title || '';
+                    document.getElementById('metaDate').value = data.metadata.date || '';
+                    document.getElementById('metaTags').value = data.metadata.tags || '';
+                    document.getElementById('metaNotes').value = data.metadata.notes || '';
+                    document.getElementById('metaMemo').value = data.metadata.memo || '';
+                    
+                    // Update state
+                    this.state.metadata = data.metadata;
+                }
+
+                // 2. Populate Content
+                this.state.finalOutput = data.content || '';
+                this.els.outputArea.value = this.state.finalOutput;
+                this.updateWordCount();
+
+                // 3. Set Manual Mode (Since this is imported data, we assume manual control)
+                this.setManualMode(true);
+                
+                // 4. Unlock UI
+                this.els.metaSection.classList.remove('opacity-50', 'pointer-events-none');
+                this.els.exportSection.classList.remove('opacity-50', 'pointer-events-none');
+                
+                // 5. Notify
+                alert('匯入成功！已還原專案狀態。');
+            },
+
+            // --- Existing Logic ---
+            getTimestampFilename() {
+                const now = new Date();
+                const year = now.getFullYear();
+                const month = String(now.getMonth() + 1).padStart(2, '0');
+                const day = String(now.getDate()).padStart(2, '0');
+                const hours = String(now.getHours()).padStart(2, '0');
+                const minutes = String(now.getMinutes()).padStart(2, '0');
+                return `code-${year}${month}${day}-${hours}${minutes}.html`;
+            },
+
+            sanitizeFilename(name) {
+                let safe = name.replace(/[^a-zA-Z0-9.\-_]/g, '');
+                if (!safe.toLowerCase().endsWith('.html')) safe += '.html';
+                return safe;
+            },
+
+            handlePasteAction(action) {
+                const content = this.els.pasteContent.value.trim();
+                if (!content) {
+                    alert('請貼上內容');
+                    return;
+                }
+
+                let filename = this.els.pasteFileName.value.trim();
+                if (!filename) filename = this.getTimestampFilename();
+                filename = this.sanitizeFilename(filename);
+
+                let finalHtml = '';
+                const lowerContent = content.toLowerCase();
+                
+                if (lowerContent.includes('<!doctype html>') || lowerContent.includes('<html')) {
+                    finalHtml = content;
+                } else {
+                    const escapedContent = content
+                        .replace(/&/g, "&amp;")
+                        .replace(/</g, "&lt;")
+                        .replace(/>/g, "&gt;")
+                        .replace(/"/g, "&quot;")
+                        .replace(/'/g, "&#039;");
+                        
+                    finalHtml = `<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>${filename}</title>
+</head>
+<body>
+    <pre><code>${escapedContent}</code></pre>
+</body>
+</html>`;
+                }
+
+                const file = new File([finalHtml], filename, { type: "text/html" });
+
+                if (action === 'download') {
+                    const url = URL.createObjectURL(file);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                } else {
+                    this.handleFile(file);
+                }
+            },
 
             toggleHelp() {
                 this.els.helpModal.classList.toggle('hidden');
             },
-
 
             setManualMode(isManual) {
                 this.state.isManualEdit = isManual;
@@ -410,15 +708,12 @@
                 }
             },
 
-
             restoreSync() {
                 if(confirm('確定要恢復自動同步嗎？\n這將會遺失您剛才手動編輯的內容，並重置為自動清洗結果。')) {
-                    // Logic fix: Force visual update immediately
                     this.setManualMode(false);
-                    this.updateOutput(true); // true forces regeneration from parsedBody
+                    this.updateOutput(true);
                 }
             },
-
 
             async handleFile(file) {
                 if (!file) return;
@@ -429,7 +724,6 @@
                     return;
                 }
 
-
                 this.state.file = file;
                 this.els.loading.classList.remove('hidden');
                 
@@ -439,15 +733,12 @@
                 
                 this.setManualMode(false);
 
-
-                // Delay to allow UI render
                 setTimeout(() => {
                     const reader = new FileReader();
                     reader.onload = (e) => this.processContent(e.target.result, ext);
-                    reader.readAsText(file); // Read as text for parsing
+                    reader.readAsText(file);
                 }, 100);
             },
-
 
             processContent(content, ext) {
                 try {
@@ -458,10 +749,8 @@
                         htmlContent = content;
                     }
 
-
                     this.state.rawHtml = htmlContent;
                     this.els.previewFrame.srcdoc = htmlContent;
-
 
                     const parser = new DOMParser();
                     const doc = parser.parseFromString(htmlContent, 'text/html');
@@ -470,18 +759,13 @@
                         doc.querySelectorAll(tag).forEach(el => el.remove());
                     });
 
-
-                    // Normalize line breaks
                     this.state.parsedBody = this.domToMarkdown(doc.body).replace(/\n{3,}/g, '\n\n').trim();
-
 
                     this.els.metaSection.classList.remove('opacity-50', 'pointer-events-none');
                     this.els.exportSection.classList.remove('opacity-50', 'pointer-events-none');
                     this.els.loading.classList.add('hidden');
 
-
                     this.updateOutput(true);
-
 
                 } catch (err) {
                     console.error(err);
@@ -490,19 +774,16 @@
                 }
             },
 
-
             updateOutput(regenerate) {
-                // If in manual mode and not forced regeneration, do nothing
                 if (this.state.isManualEdit && !regenerate) return;
-
 
                 this.state.metadata = {
                     title: document.getElementById('metaTitle').value || 'Untitled',
                     date: document.getElementById('metaDate').value,
                     tags: document.getElementById('metaTags').value,
-                    notes: document.getElementById('metaNotes').value
+                    notes: document.getElementById('metaNotes').value,
+                    memo: document.getElementById('metaMemo').value
                 };
-
 
                 const header = [
                     `# ${this.state.metadata.title}`,
@@ -513,7 +794,6 @@
                     `\n---\n`
                 ].filter(Boolean).join('\n');
 
-
                 this.state.finalOutput = header + this.state.parsedBody;
                 this.els.outputArea.value = this.state.finalOutput;
                 this.updateWordCount();
@@ -523,48 +803,84 @@
                 this.els.wordCount.textContent = `${this.state.finalOutput.length} 字元`;
             },
 
-
             download(format) {
-                if (!this.state.file) {
-                    alert('請先匯入檔案');
-                    return;
+                if (!this.state.file && format !== 'memo' && !this.state.isManualEdit) {
+                    // Allow download if manual edit is active (even without file)
+                    if (!this.state.isManualEdit) {
+                        alert('請先匯入檔案');
+                        return;
+                    }
                 }
-
 
                 let content = '';
                 let mimeType = '';
                 let ext = '';
                 let blob = null;
 
+                const fileNameBase = this.state.metadata.title || 'cleaned';
+                const memoContent = this.state.metadata.memo ? this.state.metadata.memo.trim() : '';
+                const sourceFileName = this.state.file?.name || 'Imported';
+                
+                const separateMemoContent = memoContent ? 
+                    `# 附加說明檔 (Memo)\n> 來源檔案: ${sourceFileName}\n> 建立日期: ${new Date().toLocaleDateString()}\n\n${memoContent}`
+                    : '';
 
                 if (format === 'zip') {
-                    // ZIP Logic using JSZip
                     const zip = new JSZip();
-                    // Add the ORIGINAL file
-                    zip.file(this.state.file.name, this.state.file);
-                    // Add the Parsed Markdown as well (bonus)
-                    zip.file(`${this.state.metadata.title || 'cleaned'}.md`, this.state.finalOutput);
+                    
+                    if (this.state.file) {
+                         zip.file(this.state.file.name, this.state.file);
+                    }
+                    
+                    zip.file(`${fileNameBase}.md`, this.state.finalOutput);
+
+                    const jsonContent = JSON.stringify({
+                        metadata: { ...this.state.metadata, copyright: 'Force Cheng 2025' },
+                        content: this.state.finalOutput,
+                        source: this.state.file?.name || 'Imported'
+                    }, null, 2);
+                    zip.file(`${fileNameBase}_data.json`, jsonContent);
+
+                    if (separateMemoContent) {
+                        zip.file(`(Memo) ${fileNameBase}.md`, separateMemoContent);
+                    }
                     
                     zip.generateAsync({type:"blob"}).then((content) => {
                         const url = URL.createObjectURL(content);
                         const a = document.createElement('a');
                         a.href = url;
-                        a.download = `${this.state.metadata.title || 'backup'}.zip`;
+                        a.download = `${fileNameBase}.zip`;
                         document.body.appendChild(a);
                         a.click();
                         document.body.removeChild(a);
                         URL.revokeObjectURL(url);
                     });
-                    return; // Exit here for zip
+                    return;
                 }
 
+                if (format === 'memo') {
+                    if (!separateMemoContent) {
+                        alert('目前沒有填寫任何附加說明內容。');
+                        return;
+                    }
+                    blob = new Blob([separateMemoContent], { type: 'text/markdown' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `(Memo) ${fileNameBase}.md`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                    return;
+                }
 
                 switch (format) {
                     case 'json':
                         content = JSON.stringify({
                             metadata: { ...this.state.metadata, copyright: 'Force Cheng 2025' },
                             content: this.state.finalOutput,
-                            source: this.state.file?.name
+                            source: this.state.file?.name || 'Imported'
                         }, null, 2);
                         mimeType = 'application/json';
                         ext = 'json';
@@ -581,18 +897,16 @@
                         break;
                 }
 
-
                 blob = new Blob([content], { type: mimeType });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = `${this.state.metadata.title || 'export'}.${ext}`;
+                a.download = `${fileNameBase}.${ext}`;
                 document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);
                 URL.revokeObjectURL(url);
             },
-
 
             // --- Logic Helpers ---
             decodeQuotedPrintable(str) {
@@ -616,7 +930,6 @@
                     return new TextDecoder('utf-8').decode(new Uint8Array(bytes));
                 } catch (e) { return cleanStr; }
             },
-
 
             extractHtmlFromMhtml(content) {
                 const boundaryMatch = content.match(/boundary="(.+?)"/i) || content.match(/boundary=([^\s;]+)/i);
@@ -642,7 +955,6 @@
                 }
                 throw new Error("找不到 HTML 內容");
             },
-
 
             domToMarkdown(node) {
                 if (node.nodeType === Node.TEXT_NODE) return node.textContent.replace(/\s+/g, ' ');
@@ -672,7 +984,6 @@
                 }
             }
         };
-
 
         app.init();
     </script>
