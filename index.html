@@ -3,10 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Force AI知識轉譯工具 v1.6 Test</title>
+    <title>Force AI 知識轉譯工具 v2.6 穩定版 (Stable)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- 引入 JSZip 用於壓縮檔案 -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <!-- 引入 Marked 用於渲染 Markdown -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- 引入 DOMPurify 用於 XSS 防護 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script>
         tailwind.config = {
@@ -15,6 +19,22 @@
                     fontFamily: { sans: ['Inter', 'sans-serif'] },
                     colors: {
                         brand: { 50: '#f0f9ff', 100: '#e0f2fe', 500: '#0ea5e9', 600: '#0284c7', 700: '#0369a1', 900: '#0c4a6e' }
+                    },
+                    animation: {
+                        'gradient-x': 'gradient-x 3s ease infinite',
+                        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                    },
+                    keyframes: {
+                        'gradient-x': {
+                            '0%, 100%': {
+                                'background-size': '200% 200%',
+                                'background-position': 'left center'
+                            },
+                            '50%': {
+                                'background-size': '200% 200%',
+                                'background-position': 'right center'
+                            },
+                        },
                     }
                 }
             }
@@ -36,15 +56,37 @@
         /* Source Tab Active State */
         .source-tab-active { background-color: #e0f2fe; color: #0284c7; border-color: #0284c7; }
         .source-tab-inactive { background-color: white; color: #64748b; border-color: #e2e8f0; }
-        /* JSON Tab Specific */
         .source-tab-json-active { background-color: #ecfdf5; color: #059669; border-color: #059669; }
 
-        /* Floating Agent Button Animation */
-        @keyframes bounce-slow {
-            0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(-5px); }
+        /* Agent Dock Styles */
+        .agent-dock-gradient {
+            background: linear-gradient(90deg, #a18cd1 0%, #fbc2eb 50%, #fad0c4 100%);
+            background-size: 200% auto; 
         }
-        .agent-float { animation: bounce-slow 3s infinite ease-in-out; }
+        .dock-glass {
+            background: rgba(255, 255, 255, 0.98);
+            backdrop-filter: blur(12px);
+        }
+        
+        /* Chat Bubble Styles */
+        .chat-user { background-color: #e0f2fe; color: #0369a1; border-radius: 12px 12px 0 12px; margin-left: auto; max-width: 90%; }
+        .chat-ai { background-color: #f8fafc; border: 1px solid #e2e8f0; color: #334155; border-radius: 12px 12px 12px 0; margin-right: auto; max-width: 95%; }
+        .chat-ai p { margin-bottom: 0.5em; }
+        .chat-ai p:last-child { margin-bottom: 0; }
+        .chat-ai pre { background: #1e293b; color: #e2e8f0; padding: 0.5rem; border-radius: 0.375rem; overflow-x: auto; margin: 0.5rem 0; }
+        
+        /* Typing Indicator */
+        .typing-dot { display: inline-block; width: 4px; height: 4px; border-radius: 50%; background-color: #94a3b8; animation: typing 1.4s infinite ease-in-out both; margin: 0 1px; }
+        .typing-dot:nth-child(1) { animation-delay: -0.32s; }
+        .typing-dot:nth-child(2) { animation-delay: -0.16s; }
+        @keyframes typing { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1); } }
+
+        /* Model Selection Cards */
+        .model-card { border: 2px solid transparent; transition: all 0.2s; cursor: pointer; }
+        .model-card:hover { background-color: #f8fafc; }
+        .model-card.selected { background-color: #f0f9ff; border-color: #6366f1; box-shadow: 0 4px 6px -1px rgba(99, 102, 241, 0.1), 0 2px 4px -1px rgba(99, 102, 241, 0.06); }
+        .model-card .check-icon { opacity: 0; transform: scale(0.8); transition: all 0.2s; }
+        .model-card.selected .check-icon { opacity: 1; transform: scale(1); }
     </style>
 </head>
 <body class="bg-slate-100 text-slate-800 h-screen flex flex-col overflow-hidden mode-sync" id="appBody">
@@ -54,13 +96,18 @@
         <div class="flex items-center gap-4">
             <div class="w-9 h-9 bg-brand-600 rounded-lg flex items-center justify-center text-white font-bold text-xl shadow-md bg-gradient-to-br from-brand-500 to-brand-700">F</div>
             <div class="flex flex-col">
-                <h1 class="font-bold text-lg text-slate-800 leading-none tracking-tight">Force AI知識轉譯工具 <span class="text-xs font-normal text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded border border-amber-200 ml-1">v1.6 Test</span></h1>
+                <h1 class="font-bold text-lg text-slate-800 leading-none tracking-tight">Force AI 知識轉譯工具 <span class="text-xs font-normal text-purple-700 bg-purple-100 px-1.5 py-0.5 rounded border border-purple-200 ml-1">v2.6 穩定版 (Stable)</span></h1>
                 <p class="text-[11px] text-slate-500 font-medium mt-1 tracking-wide">
-                    update: 2025/12/20 | Force Cheng x 宏大職訓2025產業新尖兵課程
+                    update: 2025/12/21 | Force_AIKM_v2.6_Stable
                 </p>
             </div>
         </div>
         <div class="flex gap-3">
+            <!-- Agent Prompt Button -->
+            <button onclick="app.toggleAgentPrompt()" class="text-slate-600 hover:text-purple-600 hover:bg-purple-50 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2h-1v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1H2a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h1a7 7 0 0 1 7-7V5.73C9.4 5.39 9 4.74 9 4a2 2 0 0 1 2-2zM4.5 19h15v-1a5 5 0 0 0-5-5h-5a5 5 0 0 0-5 5v1zM8 9a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm8 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4z"/></svg>
+                Agent 提示語
+            </button>
             <button onclick="app.toggleHelp()" class="text-slate-600 hover:text-brand-600 hover:bg-slate-50 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-2">
                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
                 使用說明
@@ -75,49 +122,119 @@
     <!-- Main Workspace -->
     <main class="flex-1 flex flex-col lg:flex-row overflow-hidden relative">
         
-        <!-- Instructions Modal -->
+        <!-- Agent Prompt Modal -->
+        <div id="agentPromptModal" class="hidden absolute inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
+            <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto custom-scrollbar flex flex-col">
+                <div class="p-6 border-b border-slate-100 flex justify-between items-center sticky top-0 bg-white z-10">
+                    <h2 class="text-xl font-bold text-slate-800 flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-purple-600"><path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2h-1v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1H2a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h1a7 7 0 0 1 7-7V5.73C9.4 5.39 9 4.74 9 4a2 2 0 0 1 2-2zM4.5 19h15v-1a5 5 0 0 0-5-5h-5a5 5 0 0 0-5 5v1zM8 9a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm8 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4z"/></svg>
+                        Agent 系統提示語 (System Prompt)
+                    </h2>
+                    <button onclick="app.toggleAgentPrompt()" class="text-slate-400 hover:text-slate-600 p-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                </div>
+                <div class="p-6 space-y-4">
+                    <p class="text-sm text-slate-600">
+                        這是專為此工具設計的 **System Prompt**。您可以將此段文字複製給 ChatGPT、Claude 或其他 AI Agent，讓它們瞬間成為本工具的專家，協助您分析文件或教學。
+                    </p>
+                    <div class="relative">
+                        <textarea id="agentPromptText" class="w-full h-64 p-4 bg-slate-50 border border-slate-200 rounded-xl font-mono text-xs text-slate-700 leading-relaxed focus:outline-none focus:ring-2 focus:ring-purple-200 resize-none" readonly>
+# Role: Force AI 知識轉譯助理
+
+你是由 Force Cheng 開發的「Force AI 知識轉譯工具」的專屬智能助理。
+你的核心任務是協助使用者理解本工具架構、處理 HTML/MHTML 文本解析，並提供專業的知識管理 (KM) 建議。
+
+## 你的行為準則 (Guidelines)
+1. **專業與精準**：回答請使用繁體中文 (Traditional Chinese)，語氣專業、簡潔且具結構性。
+2. **上下文感知**：若使用者提供了 HTML 代碼或解析後的文本，請優先依據該內容進行分析。
+3. **技術視角**：本工具採純前端架構 (Single-file HTML)，使用 Google Gemini API 與 JSZip/Marked 函式庫。若遇技術問題，請由此架構切入除錯。
+4. **輸出格式**：優先使用 Markdown 格式，對於程式碼修改建議，請提供具體的 Code Snippet。
+
+## 當使用者詢問文件內容時：
+- 請先閱讀使用者提供的 [Ingest Text] 或文件內容。
+- 摘要重點，並標註關鍵日期與標籤 (Tags)。
+- 若內容涉及 SOP 或流程，請嘗試將其轉化為條列式步驟。
+
+現在，請等待使用者輸入指令或文件內容。</textarea>
+                        <button onclick="app.copyAgentPrompt()" class="absolute top-3 right-3 bg-white border border-slate-200 shadow-sm text-slate-600 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-slate-50 hover:text-brand-600 flex items-center gap-1 transition-all">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                            複製
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- UPDATED: Help Modal with SVG Icons instead of Emojis -->
         <div id="helpModal" class="hidden absolute inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
             <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto custom-scrollbar flex flex-col">
                 <div class="p-6 border-b border-slate-100 flex justify-between items-center sticky top-0 bg-white z-10">
                     <h2 class="text-xl font-bold text-slate-800 flex items-center gap-2">
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-brand-600"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                        使用說明書
+                        使用說明書 v2.6 Stable
                     </h2>
                     <button onclick="app.toggleHelp()" class="text-slate-400 hover:text-slate-600 p-1">
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                     </button>
                 </div>
-                <div class="p-8 space-y-8">
-                    <!-- Step 1 -->
-                    <div class="flex gap-4">
-                        <div class="w-8 h-8 rounded-full bg-brand-100 text-brand-600 font-bold flex items-center justify-center shrink-0">1</div>
-                        <div>
-                            <h3 class="font-bold text-slate-800 mb-1">匯入原始檔案</h3>
-                            <p class="text-sm text-slate-600 leading-relaxed">
-                                支援 <strong>.mhtml</strong>, <strong>.html</strong>。或使用 <span class="text-emerald-600 font-bold">JSON 閱讀器 (New v1.5)</span> 還原舊專案。
+                <div class="p-6 overflow-y-auto custom-scrollbar space-y-8">
+                    
+                    <!-- Stability Note -->
+                    <div class="bg-emerald-50 border border-emerald-100 rounded-lg p-4 text-sm text-emerald-800 leading-relaxed">
+                        <p class="font-bold mb-1">ℹ️ 關於此版本</p>
+                        本版本為穩定版（Stable），以可靠使用、可教學、可長期保存為設計目標。功能將持續優化，但不影響既有資料與使用流程。
+                    </div>
+
+                    <!-- Section 1: Main Tool -->
+                    <section>
+                        <h3 class="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2 border-b border-slate-100 pb-2">
+                            <!-- Replaced Emoji with SVG -->
+                            <span class="bg-brand-100 text-brand-600 p-1 rounded">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+                            </span>
+                            主程式功能說明 (核心)
+                        </h3>
+                        <div class="space-y-4 text-sm text-slate-600 leading-relaxed">
+                            <p><strong>1. 檔案支援與解析：</strong> 
+                                <br>• 支援 <code>.mhtml</code>, <code>.html</code> 格式。
+                                <br>• 直接拖放或點擊左側虛線區域上傳，系統會自動清理並轉換為 Markdown。
+                            </p>
+                            <p><strong>2. 編輯模式 (雙模式)：</strong>
+                                <br>• <strong>自動同步</strong>：預設模式。左側修改標題/日期/標籤，右側預覽即時更新。
+                                <br>• <strong>手動編輯</strong>：若直接修改右側 Markdown 內容，將進入手動模式 (停止自動同步)。可點擊上方提示恢復同步。
+                            </p>
+                            <p><strong>3. 匯出備份：</strong> 
+                                <br>• 提供 Markdown (.md), JSON, Text (.txt) 格式。
+                                <br>• <strong>ZIP 專案包</strong>：包含原始 HTML、轉換後的 MD 與 JSON 資料，適合完整封存。
                             </p>
                         </div>
-                    </div>
-                    <!-- Step 2 -->
-                    <div class="flex gap-4">
-                        <div class="w-8 h-8 rounded-full bg-brand-100 text-brand-600 font-bold flex items-center justify-center shrink-0">2</div>
-                        <div>
-                            <h3 class="font-bold text-slate-800 mb-1">補充專案資訊</h3>
-                            <p class="text-sm text-slate-600 leading-relaxed">
-                                填寫標題、日期、備註與 Memo。
+                    </section>
+    
+                    <!-- Section 2: Agent -->
+                    <section>
+                        <h3 class="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2 border-b border-slate-100 pb-2">
+                            <!-- Replaced Emoji with SVG -->
+                            <span class="bg-purple-100 text-purple-600 p-1 rounded">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2h-1v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1H2a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h1a7 7 0 0 1 7-7V5.73C9.4 5.39 9 4.74 9 4a2 2 0 0 1 2-2zM4.5 19h15v-1a5 5 0 0 0-5-5h-5a5 5 0 0 0-5 5v1zM8 9a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm8 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4z"/></svg>
+                            </span>
+                            AI Agent 輔助功能說明
+                        </h3>
+                        <div class="space-y-4 text-sm text-slate-600 leading-relaxed">
+                            <p><strong>1. 啟動與設定：</strong>
+                                <br>• 請點擊右下角浮動按鈕開啟面板。
+                                <br>• 點擊面板內「設定齒輪」輸入 Google Gemini API Key (僅存於本地)。
+                            </p>
+                            <p><strong>2. 進階功能：</strong>
+                                <br>• <strong>連線模式</strong>：預設使用 SDK (Auto)，若環境不支援可切換為 REST (Legacy)。
+                                <br>• <strong>引用文件 (RAG Lite)</strong>：勾選輸入框上方「引用當前文件」，AI 即可讀取您正在編輯的內容並回答相關問題。
+                            </p>
+                            <p><strong>3. 提示語 (Prompt)：</strong> 
+                                <br>• 點擊右上角「Agent 提示語」按鈕，可複製專屬 System Prompt，用於訓練其他 AI 模型。
                             </p>
                         </div>
-                    </div>
-                     <!-- Step 3 -->
-                     <div class="flex gap-4">
-                        <div class="w-8 h-8 rounded-full bg-brand-100 text-brand-600 font-bold flex items-center justify-center shrink-0">3</div>
-                        <div>
-                            <h3 class="font-bold text-slate-800 mb-1">匯出</h3>
-                            <p class="text-sm text-slate-600 leading-relaxed">
-                                推薦使用 <strong>ZIP</strong> 打包，包含 JSON 原始檔以便日後還原。
-                            </p>
-                        </div>
-                    </div>
+                    </section>
+                    
                 </div>
                 <div class="p-6 border-t border-slate-100 bg-slate-50 flex justify-end">
                     <button onclick="app.toggleHelp()" class="bg-brand-600 text-white px-6 py-2 rounded-lg hover:bg-brand-700 font-medium transition-colors">
@@ -135,18 +252,15 @@
                 <section>
                     <h2 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">1. 檔案來源</h2>
                     
-                    <!-- Source Tabs (Updated for 3 Tabs) -->
+                    <!-- Source Tabs -->
                     <div class="grid grid-cols-3 gap-1 mb-3">
                         <button onclick="app.switchSourceTab('upload')" id="tabBtnUpload" class="source-tab-active px-2 py-2 text-[11px] font-bold border rounded-lg transition-all flex flex-col items-center justify-center gap-1">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                             上傳檔案
                         </button>
                         <button onclick="app.switchSourceTab('paste')" id="tabBtnPaste" class="source-tab-inactive px-2 py-2 text-[11px] font-bold border rounded-lg transition-all flex flex-col items-center justify-center gap-1">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
                             貼上 HTML
                         </button>
                         <button onclick="app.switchSourceTab('json')" id="tabBtnJson" class="source-tab-inactive px-2 py-2 text-[11px] font-bold border rounded-lg transition-all flex flex-col items-center justify-center gap-1">
-                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
                             JSON 讀取
                         </button>
                     </div>
@@ -156,168 +270,74 @@
                         <div id="dropZone" class="border-2 border-dashed border-slate-300 rounded-xl bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer group relative overflow-hidden min-h-[160px]">
                             <input type="file" id="fileInput" class="absolute inset-0 opacity-0 cursor-pointer z-10" accept=".mhtml,.mht,.html,.htm">
                             <div class="p-6 flex flex-col items-center justify-center text-center h-full">
-                                <div class="w-12 h-12 bg-white border border-slate-200 rounded-full flex items-center justify-center mb-3 shadow-sm group-hover:scale-110 transition-transform">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-brand-600"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                                </div>
                                 <p class="font-medium text-slate-700 text-sm">點擊或拖放檔案</p>
                                 <p class="text-xs text-slate-500 mt-1">支援 .mhtml, .html</p>
                             </div>
                             <!-- Success State -->
                             <div id="fileInfo" class="hidden absolute inset-0 bg-brand-50 flex flex-col items-center justify-center z-20 pointer-events-none">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-brand-600 mb-2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
                                 <span id="fileNameDisplay" class="font-medium text-brand-900 text-sm px-4 truncate w-full text-center">filename.mhtml</span>
-                                <span class="text-xs text-brand-600 mt-1">點擊以更換</span>
                             </div>
                         </div>
                     </div>
 
                     <!-- Content: Paste Mode -->
                     <div id="sourceContentPaste" class="hidden space-y-3">
-                        <div>
-                            <input type="text" id="pasteFileName" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 placeholder-slate-400" placeholder="預設: code-YYYYMMDD-HHMM.html">
-                        </div>
-                        <div>
-                            <textarea id="pasteContent" rows="8" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-mono focus:outline-none focus:ring-2 focus:ring-brand-500 placeholder-slate-400 resize-none custom-scrollbar" placeholder="在此貼上程式碼或文字..."></textarea>
-                        </div>
+                        <input type="text" id="pasteFileName" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:outline-none" placeholder="預設: code-YYYYMMDD.html">
+                        <textarea id="pasteContent" rows="8" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-mono custom-scrollbar" placeholder="在此貼上程式碼..."></textarea>
                         <div class="grid grid-cols-2 gap-2">
-                            <button onclick="app.handlePasteAction('import')" class="bg-brand-600 text-white px-3 py-2 rounded-lg text-xs font-bold hover:bg-brand-700 transition-colors">
-                                轉存並匯入
-                            </button>
-                            <button onclick="app.handlePasteAction('download')" class="bg-white border border-slate-300 text-slate-700 px-3 py-2 rounded-lg text-xs font-bold hover:bg-slate-50 transition-colors">
-                                下載 .html
-                            </button>
+                            <button onclick="app.handlePasteAction('import')" class="bg-brand-600 text-white px-3 py-2 rounded-lg text-xs font-bold hover:bg-brand-700">匯入</button>
+                            <button onclick="app.handlePasteAction('download')" class="bg-white border border-slate-300 text-slate-700 px-3 py-2 rounded-lg text-xs font-bold hover:bg-slate-50">下載</button>
                         </div>
                     </div>
 
-                     <!-- Content: JSON Reader Mode (NEW) -->
+                     <!-- Content: JSON Reader Mode -->
                      <div id="sourceContentJson" class="hidden space-y-3">
-                        <div class="relative group">
-                            <textarea id="jsonContent" rows="6" class="w-full px-3 py-2 bg-emerald-50/30 border border-emerald-200 rounded-lg text-xs font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder-emerald-400 resize-none custom-scrollbar" placeholder="{ 'metadata': ... } 請在此貼上 JSON 備份檔內容，或點擊下方按鈕上傳"></textarea>
-                        </div>
-                        
+                        <textarea id="jsonContent" rows="6" class="w-full px-3 py-2 bg-emerald-50/30 border border-emerald-200 rounded-lg text-xs font-mono custom-scrollbar" placeholder="{ 'metadata': ... } 請貼上 JSON"></textarea>
                         <div class="flex gap-2">
-                             <label class="flex-1 bg-white border border-dashed border-emerald-300 text-emerald-600 px-3 py-2 rounded-lg text-xs font-bold hover:bg-emerald-50 transition-colors cursor-pointer flex items-center justify-center gap-2">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                                讀取 .json 檔
+                             <label class="flex-1 bg-white border border-dashed border-emerald-300 text-emerald-600 px-3 py-2 rounded-lg text-xs font-bold hover:bg-emerald-50 cursor-pointer flex items-center justify-center gap-2">
+                                讀取 .json
                                 <input type="file" id="jsonFileInput" class="hidden" accept=".json">
                             </label>
-                            <button onclick="app.handleJsonImport()" class="flex-1 bg-emerald-600 text-white px-3 py-2 rounded-lg text-xs font-bold hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-                                解析並填入
-                            </button>
+                            <button onclick="app.handleJsonImport()" class="flex-1 bg-emerald-600 text-white px-3 py-2 rounded-lg text-xs font-bold hover:bg-emerald-700">解析</button>
                         </div>
-                        
-                        <!-- JSON Preview Area -->
                         <div id="jsonPreview" class="hidden p-3 bg-white border border-emerald-100 rounded-lg space-y-2">
-                            <h4 class="text-xs font-bold text-emerald-700 border-b border-emerald-50 pb-1 mb-1">預覽偵測資料</h4>
                             <div class="grid grid-cols-2 gap-2 text-[10px] text-slate-500">
                                 <div>標題: <span id="jpTitle" class="font-medium text-slate-700">---</span></div>
                                 <div>日期: <span id="jpDate" class="font-medium text-slate-700">---</span></div>
-                                <div>長度: <span id="jpLen" class="font-medium text-slate-700">---</span></div>
-                                <div>Memo: <span id="jpMemo" class="font-medium text-slate-700">無</span></div>
                             </div>
                         </div>
                     </div>
-
                 </section>
 
                 <!-- 2. Metadata Section -->
                 <section id="metaSection" class="opacity-50 pointer-events-none transition-opacity duration-300 relative">
-                    <div class="flex items-center justify-between mb-4">
-                        <h2 class="text-xs font-bold text-slate-400 uppercase tracking-wider">2. 專案資訊 (Metadata)</h2>
-                        <!-- Sync Status Indicator -->
-                        <div id="syncStatus" class="flex items-center gap-1.5 text-[10px] font-medium text-green-600 px-2 py-1 bg-green-50 rounded-full border border-green-100">
-                            <span class="w-1.5 h-1.5 rounded-full bg-green-500 status-dot"></span>
-                            自動同步中
-                        </div>
+                    <h2 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">2. 專案資訊 (Metadata)</h2>
+                    <div id="manualModeOverlay" class="hidden absolute inset-0 bg-white/80 z-30 flex flex-col items-center justify-center text-center p-6 border border-amber-200 rounded-lg">
+                        <button onclick="app.restoreSync()" class="w-full px-4 py-2 bg-white border border-slate-300 text-slate-700 text-xs font-medium rounded-lg">恢復自動同步</button>
                     </div>
-                    
-                    <!-- Manual Mode Warning Overlay -->
-                    <div id="manualModeOverlay" class="hidden absolute inset-0 bg-white/80 backdrop-blur-[2px] z-30 flex flex-col items-center justify-center text-center p-6 border border-amber-200 rounded-lg shadow-sm">
-                        <div class="w-10 h-10 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mb-2">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                        </div>
-                        <p class="text-sm font-bold text-slate-800 mb-1">手動編輯模式</p>
-                        <p class="text-xs text-slate-500 mb-4">左側同步已鎖定，以保護您的修改</p>
-                        <button onclick="app.restoreSync()" class="w-full px-4 py-2 bg-white border border-slate-300 text-slate-700 text-xs font-medium rounded-lg hover:bg-slate-50 hover:border-brand-300 hover:text-brand-600 transition-all flex items-center justify-center gap-2">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
-                            恢復自動同步
-                        </button>
-                    </div>
-
                     <div class="space-y-4">
-                        <div>
-                            <label class="block text-sm font-medium text-slate-700 mb-1">文件標題</label>
-                            <input type="text" id="metaTitle" class="meta-input w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-shadow" placeholder="例如：2024 AI 架構會議記錄">
-                        </div>
-                        
+                        <input type="text" id="metaTitle" class="meta-input w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm" placeholder="文件標題">
                         <div class="grid grid-cols-2 gap-4">
-                            <div>
-                                <label class="block text-sm font-medium text-slate-700 mb-1">日期</label>
-                                <input type="date" id="metaDate" class="meta-input w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-slate-700 mb-1">標籤/類型</label>
-                                <input type="text" id="metaTags" class="meta-input w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" placeholder="e.g. Brainstorming">
-                            </div>
+                            <input type="date" id="metaDate" class="meta-input w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm">
+                            <input type="text" id="metaTags" class="meta-input w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm" placeholder="標籤">
                         </div>
-
-                        <div>
-                            <label class="block text-sm font-medium text-slate-700 mb-1">備註說明</label>
-                            <textarea id="metaNotes" rows="3" class="meta-input w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none" placeholder="補充上下文，以便 AI 理解..."></textarea>
-                        </div>
-
-                        <!-- NEW: Memo Field (v1.4) -->
-                        <div>
-                            <label class="block text-sm font-medium text-slate-700 mb-1 text-amber-700 flex justify-between">
-                                <span>附加說明檔 (Memo)</span>
-                            </label>
-                            <textarea id="metaMemo" rows="4" class="meta-input w-full px-3 py-2 bg-amber-50/50 border border-amber-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 resize-none placeholder-amber-400/50 text-slate-700" placeholder="獨立的 Prompt 或筆記。下載 ZIP 或點擊下方橙色按鈕可獨立匯出。"></textarea>
-                        </div>
+                        <textarea id="metaNotes" rows="3" class="meta-input w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm resize-none" placeholder="備註"></textarea>
+                        <textarea id="metaMemo" rows="4" class="meta-input w-full px-3 py-2 bg-amber-50/50 border border-amber-200 rounded-lg text-sm resize-none" placeholder="附加說明檔 (Memo)"></textarea>
                     </div>
                 </section>
 
-                <!-- 3. Export Section (Revised for v1.4) -->
+                <!-- 3. Export Section -->
                 <section id="exportSection" class="opacity-50 pointer-events-none transition-opacity duration-300 pb-8">
                     <h2 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">3. 匯出/備份</h2>
-                    
-                    <!-- Row 1: Standard Exports (White) -->
                     <div class="grid grid-cols-3 gap-2 mb-3">
-                        <button onclick="app.download('md')" class="flex flex-col items-center justify-center p-2 border border-slate-200 rounded-lg bg-white hover:bg-slate-50 hover:border-brand-300 hover:text-brand-600 hover:shadow-sm transition-all group">
-                            <span class="text-xs font-bold text-slate-700 group-hover:text-brand-600">Markdown</span>
-                            <span class="text-[9px] text-slate-400 mt-0.5">主文件</span>
-                        </button>
-                        <button onclick="app.download('json')" class="flex flex-col items-center justify-center p-2 border border-slate-200 rounded-lg bg-white hover:bg-slate-50 hover:border-brand-300 hover:text-brand-600 hover:shadow-sm transition-all group">
-                            <span class="text-xs font-bold text-slate-700 group-hover:text-brand-600">JSON</span>
-                            <span class="text-[9px] text-slate-400 mt-0.5">資料庫</span>
-                        </button>
-                        <button onclick="app.download('txt')" class="flex flex-col items-center justify-center p-2 border border-slate-200 rounded-lg bg-white hover:bg-slate-50 hover:border-brand-300 hover:text-brand-600 hover:shadow-sm transition-all group">
-                            <span class="text-xs font-bold text-slate-700 group-hover:text-brand-600">Text</span>
-                            <span class="text-[9px] text-slate-400 mt-0.5">純文字</span>
-                        </button>
+                        <button onclick="app.download('md')" class="p-2 border border-slate-200 rounded-lg bg-white hover:bg-slate-50 text-xs font-bold text-slate-700">Markdown</button>
+                        <button onclick="app.download('json')" class="p-2 border border-slate-200 rounded-lg bg-white hover:bg-slate-50 text-xs font-bold text-slate-700">JSON</button>
+                        <button onclick="app.download('txt')" class="p-2 border border-slate-200 rounded-lg bg-white hover:bg-slate-50 text-xs font-bold text-slate-700">Text</button>
                     </div>
-
-                    <!-- Row 2: Memo Download (Amber) -->
-                    <button onclick="app.download('memo')" class="w-full flex items-center justify-center gap-2 p-2 mb-3 border border-amber-200 bg-amber-50 rounded-lg text-amber-800 font-bold text-xs hover:bg-amber-100 hover:shadow-sm transition-all">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-                        下載附加說明檔 (Memo)
-                    </button>
-
-                    <!-- Row 3: ZIP Package (Indigo/Dark) -->
-                    <button onclick="app.download('zip')" class="w-full flex items-center justify-center gap-2 p-2.5 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 hover:shadow-md transition-all">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                        下載完整專案包 (ZIP)
-                    </button>
+                    <button onclick="app.download('memo')" class="w-full p-2 mb-3 border border-amber-200 bg-amber-50 rounded-lg text-amber-800 font-bold text-xs hover:bg-amber-100">下載 Memo</button>
+                    <button onclick="app.download('zip')" class="w-full p-2.5 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700">下載專案包 (ZIP)</button>
                 </section>
             </div>
-
-            <!-- Footer with Copyright -->
-            <footer class="p-4 border-t border-slate-100 bg-slate-50 text-center">
-                <p class="text-[10px] text-slate-400 font-mono leading-tight">
-                    &copy; Force Cheng 2025/12/20<br>
-                    Force AI知識轉譯工具 v1.6 Test
-                </p>
-            </footer>
         </aside>
 
         <!-- Right Panel: Preview (Main content) -->
@@ -325,45 +345,23 @@
             <!-- Tabs & Toolbar -->
             <div class="bg-white border-b border-slate-200 px-4 flex items-center justify-between h-12 shrink-0">
                 <div class="flex items-center gap-6 h-full">
-                    <button id="tabResult" class="h-full border-b-2 border-brand-600 text-brand-600 text-sm font-medium px-2 transition-colors flex items-center gap-2" onclick="app.switchTab('result')">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                        作業區 (Markdown Editor)
-                    </button>
-                    <button id="tabPreview" class="h-full border-b-2 border-transparent text-slate-500 hover:text-slate-700 text-sm font-medium px-2 transition-colors flex items-center gap-2" onclick="app.switchTab('preview')">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                        原始預覽
-                    </button>
+                    <button id="tabResult" class="h-full border-b-2 border-brand-600 text-brand-600 text-sm font-medium px-2" onclick="app.switchTab('result')">作業區</button>
+                    <button id="tabPreview" class="h-full border-b-2 border-transparent text-slate-500 hover:text-slate-700 text-sm font-medium px-2" onclick="app.switchTab('preview')">預覽</button>
                 </div>
-                
                 <div class="flex items-center gap-3">
                     <span id="wordCount" class="text-xs text-slate-400 font-mono">0 字元</span>
-                    <!-- Edit Mode Indicator (Visible when editing) -->
-                    <span id="editIndicator" class="hidden text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-100 flex items-center gap-1">
-                        <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span> 手動編輯中
-                    </span>
+                    <span id="editIndicator" class="hidden text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-100">手動編輯中</span>
                 </div>
             </div>
 
             <!-- Content Area -->
             <div class="flex-1 relative group">
-                <!-- Loading Overlay -->
-                <div id="loading" class="hidden absolute inset-0 bg-white/80 backdrop-blur-sm z-30 flex items-center justify-center">
-                    <div class="flex flex-col items-center">
-                        <svg class="animate-spin h-8 w-8 text-brand-600 mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                        <span class="text-sm font-medium text-slate-600">正在智慧清洗...</span>
-                    </div>
+                <div id="loading" class="hidden absolute inset-0 bg-white/80 z-30 flex items-center justify-center">
+                    <span class="text-sm font-medium text-slate-600">處理中...</span>
                 </div>
-
-                <!-- Markdown Editor (Now Editable) -->
                 <div id="viewResult" class="absolute inset-0 p-6 overflow-auto custom-scrollbar">
-                    <textarea 
-                        id="outputArea" 
-                        class="w-full h-full bg-white border border-slate-200 rounded-lg p-6 font-mono text-sm leading-relaxed text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-500/50 focus:border-brand-500 transition-all resize-none placeholder-slate-300" 
-                        placeholder="等待檔案匯入... (匯入後可在此直接編輯內容)"
-                    ></textarea>
+                    <textarea id="outputArea" class="w-full h-full bg-white border border-slate-200 rounded-lg p-6 font-mono text-sm leading-relaxed text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-500/50 resize-none" placeholder="等待檔案匯入..."></textarea>
                 </div>
-
-                <!-- HTML Preview -->
                 <div id="viewPreview" class="absolute inset-0 hidden bg-white">
                     <iframe id="previewFrame" class="preview-iframe" sandbox="allow-same-origin"></iframe>
                 </div>
@@ -371,25 +369,183 @@
         </section>
     </main>
 
-    <!-- Agent 小天使 Button -->
-    <div class="fixed bottom-6 right-6 z-50 group agent-float">
-        <button onclick="app.openAgentWindow()" class="bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white p-4 rounded-full shadow-lg hover:shadow-xl transition-all transform hover:scale-105 flex items-center justify-center relative border-2 border-white/20">
-            <!-- Icon -->
-            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2c-5.5 0-10 4.5-10 10 0 5.5 4.5 10 10 10s10-4.5 10-10c0-5.5-4.5-10-10-10z"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
-            <!-- Tooltip/Label -->
-            <span class="absolute right-full mr-3 bg-slate-800 text-white text-xs font-bold px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap shadow-md">
-                Agent 小天使
-                <span class="absolute right-[-4px] top-1/2 -translate-y-1/2 w-0 h-0 border-t-[4px] border-t-transparent border-l-[4px] border-l-slate-800 border-b-[4px] border-b-transparent"></span>
-            </span>
+    <!-- Global Copyright Footer -->
+    <div class="fixed bottom-3 left-4 z-50 text-[10px] text-slate-400 font-mono pointer-events-none select-none">
+        © Force Cheng 2025/12/20
+    </div>
+
+    <!-- AGENT DOCK: Internal Google Gemini (The "Dumb/Free" Agent) -->
+    <div id="agentDock" class="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-2 transition-all">
+        
+        <!-- Dock Panel -->
+        <div id="dockPanel" class="hidden w-[340px] h-[600px] rounded-xl agent-dock-gradient p-[2px] shadow-2xl animate-gradient-x flex flex-col mb-2">
+            <div class="dock-glass rounded-[10px] flex-1 flex flex-col overflow-hidden relative">
+                
+                <!-- Header -->
+                <div class="flex justify-between items-center px-4 py-3 border-b border-purple-100/50 bg-white/50 backdrop-blur-sm shrink-0">
+                    <h3 class="text-xs font-bold text-purple-800 flex items-center gap-1.5">
+                        <span class="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
+                        <!-- Added Gemini Sparkle Icon -->
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-purple-600"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
+                        智能小天使 (Gemini)
+                    </h3>
+                    <div class="flex gap-2">
+                        <button onclick="app.toggleSettings()" class="text-slate-400 hover:text-purple-600 transition-colors" title="設定 / 模型選擇">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                        </button>
+                        <button onclick="app.toggleDock()" class="text-slate-400 hover:text-slate-600 transition-colors">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- SETTINGS LAYER (Model + API Key) -->
+                <div id="dockSettings" class="absolute inset-0 bg-white/95 z-20 flex flex-col hidden overflow-y-auto custom-scrollbar">
+                    <div class="p-5">
+                        <h4 class="font-bold text-slate-800 mb-2 flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-purple-600"><path d="M12 2a10 10 0 1 0 10 10 4 4 0 0 1-5-5 4 4 0 0 1-5-5c0-5.5 2.2-10 5-10Z"/></svg>
+                            🧠 KM 模型選擇
+                        </h4>
+                        <p class="text-[10px] text-slate-500 mb-4">請依照任務需求選擇合適的模型（由簡單 → 最強）</p>
+
+                        <!-- Connection Mode Toggle (New in v2.1) -->
+                        <div class="mb-4 bg-slate-50 p-2 rounded border border-slate-200">
+                            <label class="block text-[10px] font-bold text-slate-600 mb-1">連線核心 (Core)</label>
+                            <select id="connectionModeSelect" class="w-full text-xs border border-slate-300 rounded px-2 py-1.5 bg-white focus:outline-none focus:border-purple-500">
+                                <option value="sdk">Auto (Google GenAI SDK) - 推薦</option>
+                                <option value="rest">Legacy (REST API) - 備援</option>
+                            </select>
+                        </div>
+
+                        <!-- Model Selection Grid -->
+                        <div class="space-y-3 mb-6">
+                            
+                            <!-- Option 1: Lite -->
+                            <div onclick="app.selectModel('lite')" id="model-card-lite" class="model-card bg-white rounded-lg p-3 relative border border-slate-200">
+                                <div class="flex justify-between items-start mb-1">
+                                    <div class="text-xs font-bold text-green-600">💸 入門 / 省額度</div>
+                                    <svg class="check-icon w-4 h-4 text-green-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                                </div>
+                                <div class="text-[10px] font-mono text-slate-400 mb-1">gemini-2.5-flash-lite</div>
+                                <div class="text-[10px] text-slate-600 leading-tight">快速、便宜，適合初步整理、標題生成、分類前處理</div>
+                            </div>
+
+                            <!-- Option 2: Flash -->
+                            <div onclick="app.selectModel('flash')" id="model-card-flash" class="model-card bg-white rounded-lg p-3 relative border border-slate-200 selected">
+                                <div class="flex justify-between items-start mb-1">
+                                    <div class="text-xs font-bold text-blue-600 flex items-center gap-1">⚡ 標準 / 日常 KM <span class="bg-blue-100 text-blue-700 px-1 rounded text-[9px]">預設</span></div>
+                                    <svg class="check-icon w-4 h-4 text-blue-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                                </div>
+                                <div class="text-[10px] font-mono text-slate-400 mb-1">gemini-2.5-flash</div>
+                                <div class="text-[10px] text-slate-600 leading-tight">速度與品質平衡，適合大量筆記、MEMO、日常知識整理</div>
+                            </div>
+
+                            <!-- Option 3: Pro -->
+                            <div onclick="app.selectModel('pro')" id="model-card-pro" class="model-card bg-white rounded-lg p-3 relative border border-slate-200">
+                                <div class="flex justify-between items-start mb-1">
+                                    <div class="text-xs font-bold text-purple-600">⭐ 進階 / 正式 KM</div>
+                                    <svg class="check-icon w-4 h-4 text-purple-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                                </div>
+                                <div class="text-[10px] font-mono text-slate-400 mb-1">gemini-2.5-pro</div>
+                                <div class="text-[10px] text-slate-600 leading-tight">長文件、深度摘要、結構化輸出、可稽核知識。<br><span class="text-purple-600 font-medium">✅ 建議作為 KM 系統標準</span></div>
+                            </div>
+
+                            <!-- Option 4: Pro Preview (Renamed for Stable) -->
+                            <div onclick="app.selectModel('preview')" id="model-card-preview" class="model-card bg-white rounded-lg p-3 relative border border-amber-200 bg-amber-50/30">
+                                <div class="flex justify-between items-start mb-1">
+                                    <div class="text-xs font-bold text-amber-600 flex items-center gap-1">👑 進階 / 研究情境</div>
+                                    <svg class="check-icon w-4 h-4 text-amber-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                                </div>
+                                <div class="text-[10px] font-mono text-slate-400 mb-1">gemini-3-pro-preview</div>
+                                <div class="text-[10px] text-slate-600 leading-tight">具備高強度推理與語意重構能力。<br><span class="text-amber-600 font-medium">⚠️ 進階模型選項（已可使用）</span></div>
+                            </div>
+
+                        </div>
+
+                        <!-- Custom Model ID Input -->
+                        <div class="mb-4">
+                            <label class="block text-[10px] font-bold text-slate-600 mb-1.5 flex justify-between">
+                                自訂模型 ID (選填)
+                                <span class="text-[9px] text-slate-400 font-normal">若填寫將覆蓋上方選擇</span>
+                            </label>
+                            <input type="text" id="customModelIdInput" class="w-full border border-slate-300 rounded px-3 py-2 text-xs font-mono placeholder-slate-300 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-200 transition-all" placeholder="例如: gemini-exp-1206">
+                        </div>
+
+                        <hr class="border-slate-100 mb-4">
+
+                        <h4 class="font-bold text-slate-800 mb-2">API 金鑰設定</h4>
+                        <div class="relative mb-2">
+                            <input type="password" id="apiKeyInput" class="w-full border border-slate-300 rounded pl-3 pr-8 py-2 text-xs focus:outline-none focus:border-purple-500" placeholder="貼上 Gemini API Key (AIza...)">
+                            <button onclick="app.toggleKeyVisibility()" class="absolute right-2 top-2 text-slate-400 hover:text-purple-600 transition-colors">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                            </button>
+                        </div>
+                        <p class="text-[10px] text-slate-400 mb-4 bg-slate-50 p-2 rounded border border-slate-100">
+                            🔒 API Key 僅儲存在使用者瀏覽器本地端 (LocalStorage)，不會被上傳或記錄。
+                        </p>
+
+                        <div class="flex gap-2">
+                            <button onclick="app.saveSettings()" class="flex-1 bg-purple-600 text-white py-2 rounded text-xs font-bold hover:bg-purple-700 transition-colors">儲存設定</button>
+                            <button onclick="app.toggleSettings()" class="px-4 border border-slate-300 rounded text-xs hover:bg-slate-50 transition-colors">取消</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Chat History Area -->
+                <div id="chatHistory" class="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar text-xs">
+                    <div class="chat-ai p-3">
+                        你好！我是您的輔助小天使。👋<br>
+                        目前預設使用 <code class="bg-blue-100 text-blue-700 px-1 rounded">gemini-2.5-flash</code> 模型，適合日常快速問答。<br><br>
+                        💡 若需要進階邏輯推理或處理複雜任務，請至設定切換為 <strong>Pro</strong> 或 <strong>Preview</strong> 版本喔！
+                    </div>
+                </div>
+
+                <!-- Input Area -->
+                <div class="p-3 bg-white border-t border-purple-50 shrink-0">
+                    
+                    <!-- Context Checkbox (New in v2.1) -->
+                    <div class="flex items-center gap-2 mb-2 px-1">
+                        <label class="flex items-center gap-1.5 cursor-pointer text-[10px] text-slate-500 hover:text-purple-600 transition-colors select-none">
+                            <input type="checkbox" id="contextCheckbox" class="w-3 h-3 text-purple-600 rounded border-slate-300 focus:ring-purple-500">
+                            📎 引用當前文件 (Context)
+                        </label>
+                    </div>
+
+                    <div class="relative">
+                        <textarea id="chatInput" rows="2" class="w-full bg-slate-50 border border-slate-200 rounded-lg pl-3 pr-10 py-2 text-xs focus:ring-2 focus:ring-purple-200 focus:border-purple-300 outline-none resize-none custom-scrollbar placeholder-slate-400" placeholder="輸入指令... (Shift+Enter 換行)" onkeydown="app.handleChatKey(event)"></textarea>
+                        <button onclick="app.sendChatMessage()" class="absolute right-2 bottom-2 text-purple-500 hover:text-purple-700 p-1 rounded-full hover:bg-purple-50 transition-colors">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                        </button>
+                    </div>
+                    <div class="flex justify-between mt-2">
+                        <button onclick="app.clearChat()" class="text-[10px] text-slate-400 hover:text-red-500">清除紀錄</button>
+                        <button onclick="app.saveAgentChat()" class="text-[10px] text-purple-500 hover:text-purple-700 font-medium flex items-center gap-1">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                            另存對話
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Floating Launcher (Toggle) -->
+        <button id="dockLauncher" onclick="app.toggleDock()" class="bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 text-white p-3 rounded-full shadow-lg hover:shadow-xl transition-all transform hover:scale-105 flex items-center justify-center relative border-2 border-white/20 mb-2">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        </button>
+
+        <!-- EXTERNAL EXPERT BUTTON (SVG Restored & Text White Ensured) -->
+        <button onclick="app.openExternalExpert()" class="bg-gradient-to-r from-rose-500 to-orange-500 hover:from-rose-600 hover:to-orange-600 text-white px-4 py-3 rounded-full shadow-lg hover:shadow-xl transition-all transform hover:scale-105 flex items-center justify-center relative border-2 border-white/20 agent-float">
+            <!-- Restored Lightning Icon with explicit class for visibility -->
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2 text-white"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            <span class="text-xs font-bold text-white">進階外援 ChatGPT</span>
         </button>
     </div>
 
     <script>
         /**
-         * Force AI知識轉譯工具 v1.6 Test
-         * - Update: 2025/12/20
-         * - Add Tab 3: JSON Reader for restoring backup
-         * - Add Agent Angel Floating Button with updated link
+         * Force AI 知識轉譯工具 v2.6 Stable
+         * - Update: 2025/12/21
+         * - Fix: Icons restored (Modal Emojis replaced with SVGs, Zap icon ensured)
          */
         const app = {
             state: {
@@ -399,156 +555,633 @@
                 metadata: { title: '', date: '', tags: '', notes: '', memo: '' },
                 finalOutput: '', 
                 isManualEdit: false,
-                importedJson: null // Stores temp JSON data
+                importedJson: null, 
+                externalWindow: null,
+                apiKey: '', 
+                chatHistory: [],
+                selectedModelKey: 'flash', 
+                customModelName: '',
+                connectionMode: 'sdk',
+                modelMapping: {
+                    'lite': 'gemini-2.5-flash-lite',        
+                    'flash': 'gemini-2.5-flash',   
+                    'pro': 'gemini-2.5-pro',       
+                    'preview': 'gemini-3-pro-preview'    
+                },
+                modelDisplayNames: {
+                    'lite': 'gemini-2.5-flash-lite',
+                    'flash': 'gemini-2.5-flash',
+                    'pro': 'gemini-2.5-pro',
+                    'preview': 'gemini-3-pro-preview'
+                }
+            },
+
+            getIsoNow() {
+              const now = new Date();
+              const pad = (n) => String(n).padStart(2, '0');
+              const yyyy = now.getFullYear();
+              const MM = pad(now.getMonth() + 1);
+              const dd = pad(now.getDate());
+              const hh = pad(now.getHours());
+              const mm = pad(now.getMinutes());
+              const ss = pad(now.getSeconds());
+              return `${yyyy}-${MM}-${dd}T${hh}:${mm}:${ss}+08:00`;
+            },
+
+            buildMetaBlock(metaObj) {
+              const entries = Object.entries(metaObj || {});
+              const body = entries.map(([k, v]) => `${k}=${String(v)}`).join('\n');
+              return `<<META>>\n${body}\n<<END>>`;
+            },
+
+            buildIngestTextLine(roleTag, isoTs, metaObj, plainText) {
+              const meta = this.buildMetaBlock(metaObj);
+              return `${roleTag}\n[@${isoTs}]\n${meta}\n${plainText}\n`;
             },
 
             init() {
-                this.els = {
-                    appBody: document.getElementById('appBody'),
-                    fileInput: document.getElementById('fileInput'),
-                    jsonFileInput: document.getElementById('jsonFileInput'), // New
-                    dropZone: document.getElementById('dropZone'),
-                    fileInfo: document.getElementById('fileInfo'),
-                    fileNameDisplay: document.getElementById('fileNameDisplay'),
-                    metaSection: document.getElementById('metaSection'),
-                    exportSection: document.getElementById('exportSection'),
-                    outputArea: document.getElementById('outputArea'),
-                    previewFrame: document.getElementById('previewFrame'),
-                    loading: document.getElementById('loading'),
-                    metaInputs: ['metaTitle', 'metaDate', 'metaTags', 'metaNotes', 'metaMemo'],
-                    wordCount: document.getElementById('wordCount'),
-                    syncStatus: document.getElementById('syncStatus'),
-                    manualModeOverlay: document.getElementById('manualModeOverlay'),
-                    editIndicator: document.getElementById('editIndicator'),
-                    helpModal: document.getElementById('helpModal'),
+                if (document.readyState !== 'loading') {
+                    this.initElements();
+                } else {
+                    document.addEventListener('DOMContentLoaded', () => this.initElements());
+                }
+            },
+
+            initElements() {
+                try {
+                    this.els = {
+                        appBody: document.getElementById('appBody'),
+                        fileInput: document.getElementById('fileInput'),
+                        jsonFileInput: document.getElementById('jsonFileInput'), 
+                        dropZone: document.getElementById('dropZone'),
+                        fileInfo: document.getElementById('fileInfo'),
+                        fileNameDisplay: document.getElementById('fileNameDisplay'),
+                        metaSection: document.getElementById('metaSection'),
+                        exportSection: document.getElementById('exportSection'),
+                        outputArea: document.getElementById('outputArea'),
+                        previewFrame: document.getElementById('previewFrame'),
+                        loading: document.getElementById('loading'),
+                        metaInputs: ['metaTitle', 'metaDate', 'metaTags', 'metaNotes', 'metaMemo'],
+                        wordCount: document.getElementById('wordCount'),
+                        syncStatus: document.getElementById('syncStatus'), // Note: this might be null
+                        manualModeOverlay: document.getElementById('manualModeOverlay'),
+                        editIndicator: document.getElementById('editIndicator'),
+                        helpModal: document.getElementById('helpModal'),
+                        agentPromptModal: document.getElementById('agentPromptModal'), 
+                        agentPromptText: document.getElementById('agentPromptText'), 
+                        
+                        tabBtnUpload: document.getElementById('tabBtnUpload'),
+                        tabBtnPaste: document.getElementById('tabBtnPaste'),
+                        tabBtnJson: document.getElementById('tabBtnJson'), 
+                        sourceContentUpload: document.getElementById('sourceContentUpload'),
+                        sourceContentPaste: document.getElementById('sourceContentPaste'),
+                        sourceContentJson: document.getElementById('sourceContentJson'), 
+                        pasteFileName: document.getElementById('pasteFileName'),
+                        pasteContent: document.getElementById('pasteContent'),
+                        jsonContent: document.getElementById('jsonContent'), 
+                        jsonPreview: document.getElementById('jsonPreview'), 
+                        jpTitle: document.getElementById('jpTitle'),
+                        jpDate: document.getElementById('jpDate'),
+
+                        dockPanel: document.getElementById('dockPanel'),
+                        dockLauncher: document.getElementById('dockLauncher'),
+                        chatInput: document.getElementById('chatInput'),
+                        chatHistoryDiv: document.getElementById('chatHistory'),
+                        dockSettings: document.getElementById('dockSettings'),
+                        apiKeyInput: document.getElementById('apiKeyInput'),
+                        customModelIdInput: document.getElementById('customModelIdInput'),
+                        connectionModeSelect: document.getElementById('connectionModeSelect'),
+                        contextCheckbox: document.getElementById('contextCheckbox')
+                    };
+
+                    const savedKey = localStorage.getItem('forceai_gemini_key');
+                    if (savedKey && this.els.apiKeyInput) {
+                        this.state.apiKey = savedKey;
+                        this.els.apiKeyInput.value = savedKey;
+                    }
+
+                    const savedModel = localStorage.getItem('forceai_gemini_model');
+                    if (savedModel && this.state.modelMapping[savedModel]) {
+                        this.state.selectedModelKey = savedModel;
+                    }
                     
-                    // Source Tabs
-                    tabBtnUpload: document.getElementById('tabBtnUpload'),
-                    tabBtnPaste: document.getElementById('tabBtnPaste'),
-                    tabBtnJson: document.getElementById('tabBtnJson'), // New
-                    sourceContentUpload: document.getElementById('sourceContentUpload'),
-                    sourceContentPaste: document.getElementById('sourceContentPaste'),
-                    sourceContentJson: document.getElementById('sourceContentJson'), // New
-                    pasteFileName: document.getElementById('pasteFileName'),
-                    pasteContent: document.getElementById('pasteContent'),
-                    jsonContent: document.getElementById('jsonContent'), // New
-                    jsonPreview: document.getElementById('jsonPreview'), // New
-                    jpTitle: document.getElementById('jpTitle'),
-                    jpDate: document.getElementById('jpDate'),
-                    jpLen: document.getElementById('jpLen'),
-                    jpMemo: document.getElementById('jpMemo')
-                };
+                    const savedCustomModel = localStorage.getItem('forceai_gemini_custom_model');
+                    if (savedCustomModel && this.els.customModelIdInput) {
+                        this.state.customModelName = savedCustomModel;
+                        this.els.customModelIdInput.value = savedCustomModel;
+                    }
 
-                // Listeners
-                this.els.fileInput.addEventListener('change', (e) => this.handleFile(e.target.files[0]));
-                this.els.jsonFileInput.addEventListener('change', (e) => this.handleJsonFile(e.target.files[0])); // New
+                    const savedConnMode = localStorage.getItem('forceai_gemini_connection_mode');
+                    if (savedConnMode && this.els.connectionModeSelect) {
+                        this.state.connectionMode = savedConnMode;
+                        this.els.connectionModeSelect.value = savedConnMode;
+                    }
 
-                // Listener for JSON paste
-                this.els.jsonContent.addEventListener('input', (e) => this.previewJson(e.target.value));
-                
-                this.els.metaInputs.forEach(id => {
-                    document.getElementById(id).addEventListener('input', () => {
-                        if (!this.state.isManualEdit) this.updateOutput(false);
-                        else {
-                            this.state.metadata.memo = document.getElementById('metaMemo').value;
+                    this.updateModelSelectionUI();
+
+                    if (this.els.fileInput) this.els.fileInput.addEventListener('change', (e) => this.handleFile(e.target.files[0]));
+                    if (this.els.jsonFileInput) this.els.jsonFileInput.addEventListener('change', (e) => this.handleJsonFile(e.target.files[0]));
+                    if (this.els.jsonContent) this.els.jsonContent.addEventListener('input', (e) => this.previewJson(e.target.value));
+                    
+                    this.els.metaInputs.forEach(id => {
+                        const el = document.getElementById(id);
+                        if(el) {
+                            el.addEventListener('input', () => {
+                                const memoEl = document.getElementById('metaMemo');
+                                if (!this.state.isManualEdit) this.updateOutput(false);
+                                else if (memoEl) {
+                                    this.state.metadata.memo = memoEl.value;
+                                }
+                            });
                         }
                     });
-                });
 
-                this.els.outputArea.addEventListener('input', (e) => {
-                    this.state.finalOutput = e.target.value;
-                    this.updateWordCount();
-                    if (!this.state.isManualEdit && this.state.file) {
-                        this.setManualMode(true);
+                    if (this.els.outputArea) {
+                        this.els.outputArea.addEventListener('input', (e) => {
+                            this.state.finalOutput = e.target.value;
+                            this.updateWordCount();
+                            if (!this.state.isManualEdit && this.state.file) {
+                                this.setManualMode(true);
+                            }
+                        });
                     }
-                });
 
-                document.getElementById('metaDate').valueAsDate = new Date();
-                
-                // Drag & Drop
-                ['dragenter', 'dragover'].forEach(evt => {
-                    this.els.dropZone.addEventListener(evt, (e) => {
-                        e.preventDefault();
-                        this.els.dropZone.classList.add('border-brand-500', 'bg-brand-50');
-                    });
-                });
-                ['dragleave', 'drop'].forEach(evt => {
-                    this.els.dropZone.addEventListener(evt, (e) => {
-                        e.preventDefault();
-                        this.els.dropZone.classList.remove('border-brand-500', 'bg-brand-50');
-                    });
-                });
-                this.els.dropZone.addEventListener('drop', (e) => {
-                    e.preventDefault();
-                    this.els.dropZone.classList.remove('border-brand-500', 'bg-brand-50');
-                    if (e.dataTransfer.files[0]) this.handleFile(e.dataTransfer.files[0]);
-                });
+                    const metaDate = document.getElementById('metaDate');
+                    if(metaDate) metaDate.valueAsDate = new Date();
+                    
+                    if (this.els.dropZone) {
+                        ['dragenter', 'dragover'].forEach(evt => {
+                            this.els.dropZone.addEventListener(evt, (e) => {
+                                e.preventDefault();
+                                this.els.dropZone.classList.add('border-brand-500', 'bg-brand-50');
+                            });
+                        });
+                        ['dragleave', 'drop'].forEach(evt => {
+                            this.els.dropZone.addEventListener(evt, (e) => {
+                                e.preventDefault();
+                                this.els.dropZone.classList.remove('border-brand-500', 'bg-brand-50');
+                            });
+                        });
+                        this.els.dropZone.addEventListener('drop', (e) => {
+                            e.preventDefault();
+                            this.els.dropZone.classList.remove('border-brand-500', 'bg-brand-50');
+                            if (e.dataTransfer.files[0]) this.handleFile(e.dataTransfer.files[0]);
+                        });
+                    }
+
+                    console.log("Force AI Init Complete.");
+                } catch(err) {
+                    console.error("Init Error:", err);
+                    alert("系統初始化失敗：" + err.message);
+                }
             },
 
-            // --- Agent Window Logic ---
-            openAgentWindow() {
+            selectModel(key) {
+                this.state.selectedModelKey = key;
+                this.updateModelSelectionUI();
+            },
+
+            updateModelSelectionUI() {
+                ['lite', 'flash', 'pro', 'preview'].forEach(k => {
+                    const el = document.getElementById(`model-card-${k}`);
+                    if (el) el.classList.remove('selected');
+                });
+                
+                const activeEl = document.getElementById(`model-card-${this.state.selectedModelKey}`);
+                if (activeEl) activeEl.classList.add('selected');
+            },
+
+            toggleDock() {
+                if (this.els.dockPanel) this.els.dockPanel.classList.toggle('hidden');
+                if (this.els.dockLauncher) this.els.dockLauncher.classList.toggle('hidden');
+            },
+
+            toggleSettings() {
+                if (this.els.dockSettings) this.els.dockSettings.classList.toggle('hidden');
+            },
+
+            toggleKeyVisibility() {
+                const input = this.els.apiKeyInput;
+                if (input) input.type = input.type === 'password' ? 'text' : 'password';
+            },
+
+            toggleAgentPrompt() {
+                if (this.els.agentPromptModal) this.els.agentPromptModal.classList.toggle('hidden');
+            },
+
+            copyAgentPrompt() {
+                const ta = this.els.agentPromptText;
+                if (!ta) return;
+                ta.select();
+                ta.setSelectionRange(0, 99999); 
+                
+                if (navigator.clipboard && window.isSecureContext) {
+                    navigator.clipboard.writeText(ta.value).then(() => {
+                        alert('✅ 已複製 Agent 提示語！');
+                    }).catch(() => {
+                        document.execCommand('copy');
+                        alert('✅ 已複製 Agent 提示語！');
+                    });
+                } else {
+                    document.execCommand('copy');
+                    alert('✅ 已複製 Agent 提示語！');
+                }
+            },
+
+            saveSettings() {
+                if (this.els.apiKeyInput) {
+                    const key = this.els.apiKeyInput.value.trim();
+                    if (key) {
+                        this.state.apiKey = key;
+                        localStorage.setItem('forceai_gemini_key', key);
+                    }
+                }
+                
+                localStorage.setItem('forceai_gemini_model', this.state.selectedModelKey);
+                
+                if (this.els.customModelIdInput) {
+                    const customId = this.els.customModelIdInput.value.trim();
+                    this.state.customModelName = customId;
+                    if(customId) {
+                        localStorage.setItem('forceai_gemini_custom_model', customId);
+                    } else {
+                        localStorage.removeItem('forceai_gemini_custom_model');
+                    }
+                }
+
+                if (this.els.connectionModeSelect) {
+                    const connMode = this.els.connectionModeSelect.value;
+                    this.state.connectionMode = connMode;
+                    localStorage.setItem('forceai_gemini_connection_mode', connMode);
+                }
+                
+                this.toggleSettings();
+                
+                let display = '';
+                if (this.state.customModelName) {
+                    display = `${this.state.customModelName} (自訂)`;
+                } else {
+                    display = this.state.modelDisplayNames[this.state.selectedModelKey];
+                }
+                
+                this.appendChatBubble('system', `設定已更新！\n目前模型：\`${display}\`\n連線模式：\`${this.state.connectionMode}\`\n準備就緒。`,
+                  { role:'system_event', type:'settings_update', model: display, connection: this.state.connectionMode, source:'ui_action' }
+                );
+            },
+
+            handleChatKey(e) {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    this.sendChatMessage();
+                }
+            },
+
+            appendChatBubble(role, text, metaOverride = null) {
+              const isoTs = this.getIsoNow();
+              let roleTag = '🤖 AI:';
+              let authorLabel = 'Gemini';
+              if (role === 'user') { roleTag = '🧑 Human:'; authorLabel = 'You'; }
+              if (role === 'system') { roleTag = '🧠 System:'; authorLabel = 'System'; }
+
+              const metaObj = metaOverride || {
+                role: role === 'user' ? 'user_input' : (role === 'system' ? 'system_event' : 'ai_response'),
+                model: this.state.modelMapping?.[this.state.selectedModelKey] || '',
+                source: role === 'system' ? 'ui_or_runtime' : 'chat',
+              };
+
+              const ingestLine = this.buildIngestTextLine(roleTag, isoTs, metaObj, text);
+
+              const div = document.createElement('div');
+              div.className = role === 'user' ? 'chat-user p-3 mb-3 text-xs' : 'chat-ai p-3 mb-3 text-xs';
+
+              const tsHtml = `<div style="font-size:10px;color:#94a3b8;text-align:right;margin-bottom:4px;">${isoTs}</div>`;
+
+              if (role === 'user' || role === 'system') {
+                div.innerHTML = tsHtml + `<div>${DOMPurify.sanitize(text)}</div>`;
+              } else {
+                div.innerHTML = tsHtml + DOMPurify.sanitize(marked.parse(text));
+              }
+
+              if (this.els.chatHistoryDiv) {
+                  this.els.chatHistoryDiv.appendChild(div);
+                  this.els.chatHistoryDiv.scrollTop = this.els.chatHistoryDiv.scrollHeight;
+              }
+
+              this.state.chatHistory.push({
+                role,
+                authorLabel,
+                isoTs,
+                meta: metaObj,
+                text,
+                ingestLine
+              });
+            },
+
+            addLoadingIndicator() {
+                const loadingDiv = document.createElement('div');
+                loadingDiv.className = 'chat-ai p-3 mb-3 text-xs flex items-center';
+                loadingDiv.innerHTML = '<span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span>';
+                if (this.els.chatHistoryDiv) {
+                    this.els.chatHistoryDiv.appendChild(loadingDiv);
+                    this.els.chatHistoryDiv.scrollTop = this.els.chatHistoryDiv.scrollHeight;
+                }
+                return loadingDiv;
+            },
+
+            async sendChatMessage() {
+                if (!this.els.chatInput) return;
+                const text = this.els.chatInput.value.trim();
+                if (!text) return;
+                
+                if (!this.state.apiKey) {
+                    this.toggleSettings();
+                    alert("請先設定 Gemini API Key");
+                    return;
+                }
+
+                let finalPrompt = text;
+                const useContext = this.els.contextCheckbox ? this.els.contextCheckbox.checked : false;
+                if (useContext && this.state.finalOutput) {
+                    finalPrompt = `${text}\n\n---\n[System Reference Data]\nThe following is the content of the document the user is currently working on.\nPlease use this as context to answer the user's question.\n\n${this.state.finalOutput}`;
+                }
+
+                this.appendChatBubble('user', text);
+                this.els.chatInput.value = '';
+                const loadingDiv = this.addLoadingIndicator();
+
+                let targetModel = "";
+                if (this.state.customModelName) {
+                    targetModel = this.state.customModelName;
+                } else {
+                    targetModel = this.state.modelMapping[this.state.selectedModelKey];
+                }
+
+                try {
+                    let aiResponse = "";
+
+                    if (this.state.connectionMode === 'sdk') {
+                        try {
+                            const { GoogleGenerativeAI } = await import("https://esm.run/@google/generative-ai");
+                            const genAI = new GoogleGenerativeAI(this.state.apiKey);
+                            const model = genAI.getGenerativeModel({ model: targetModel });
+                            const result = await model.generateContent(finalPrompt);
+                            const response = await result.response;
+                            aiResponse = response.text();
+                        } catch (sdkErr) {
+                            console.warn("SDK Failed, trying fallback logic inside SDK block...", sdkErr);
+                            if (sdkErr.message.includes('403') || sdkErr.message.includes('API key')) {
+                                throw new Error("API Key 無效或權限不足");
+                            }
+                            if (sdkErr.message.includes('import') || sdkErr.message.includes('module')) {
+                                throw sdkErr; 
+                            }
+                            const fallbackModel = 'gemini-2.5-flash';
+                            if (targetModel !== fallbackModel) {
+                                const toast = document.createElement('div');
+                                toast.className = "text-[10px] text-amber-600 text-center mb-1";
+                                toast.textContent = `⚠️ 模型 ${targetModel} 忙碌中，SDK 切換至 ${fallbackModel}`;
+                                if (this.els.chatHistoryDiv) this.els.chatHistoryDiv.insertBefore(toast, loadingDiv);
+                                
+                                const { GoogleGenerativeAI } = await import("https://esm.run/@google/generative-ai");
+                                const genAI = new GoogleGenerativeAI(this.state.apiKey);
+                                const model = genAI.getGenerativeModel({ model: fallbackModel });
+                                const result = await model.generateContent(finalPrompt);
+                                const response = await result.response;
+                                aiResponse = response.text();
+                            } else {
+                                throw sdkErr;
+                            }
+                        }
+                    } else {
+                        throw new Error("Manual REST Mode Triggered"); 
+                    }
+
+                    if (this.els.chatHistoryDiv) this.els.chatHistoryDiv.removeChild(loadingDiv);
+                    this.appendChatBubble('model', aiResponse || "(No response text)");
+
+                } catch (err) {
+                    console.error("AI Error / REST Fallback:", err);
+                    
+                    if (this.state.connectionMode === 'rest' || err.message.includes('import') || err.message.includes('module') || err.message.includes('Manual REST')) {
+                         if (this.state.connectionMode !== 'rest') {
+                             this.appendChatBubble('system', "**SDK Load Failed.** Switching to REST fallback...");
+                         }
+                         
+                         try {
+                            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent`, {
+                                method: 'POST',
+                                headers: { 
+                                    'Content-Type': 'application/json',
+                                    'x-goog-api-key': this.state.apiKey 
+                                },
+                                body: JSON.stringify({ contents: [{ parts: [{ text: finalPrompt }] }] })
+                            });
+                            const data = await response.json();
+                            
+                            if (data.error) throw new Error(data.error.message);
+
+                            const restText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                            if (this.els.chatHistoryDiv) this.els.chatHistoryDiv.removeChild(loadingDiv);
+                            if(restText) this.appendChatBubble('model', restText);
+                            else throw new Error("Unknown REST response structure");
+                         } catch(restErr) {
+                             if (this.els.chatHistoryDiv) this.els.chatHistoryDiv.removeChild(loadingDiv);
+                             this.appendChatBubble('system', `**All connection methods failed:** ${restErr.message}`);
+                         }
+                    } else {
+                        if (this.els.chatHistoryDiv) this.els.chatHistoryDiv.removeChild(loadingDiv);
+                        this.appendChatBubble('system', `**System Error:** ${err.message}`);
+                    }
+                }
+            },
+
+            clearChat() {
+                if(confirm("確定清除對話紀錄？")) {
+                    if (this.els.chatHistoryDiv) this.els.chatHistoryDiv.innerHTML = '';
+                    this.state.chatHistory = [];
+                    
+                    let currentModel = "";
+                    if (this.state.customModelName) {
+                        currentModel = `${this.state.customModelName} (自訂)`;
+                    } else {
+                        currentModel = this.state.modelDisplayNames[this.state.selectedModelKey];
+                    }
+                    this.appendChatBubble('system', `紀錄已清除。\n目前模型：\`${currentModel}\``);
+                }
+            },
+
+            openExternalExpert() {
                 const url = 'https://chatgpt.com/g/g-69469a87083c8191a679056e7a35c329-falo-ai-km-agent-zhi-shi-xiao-tian-shi';
+                if (this.state.externalWindow && !this.state.externalWindow.closed) {
+                    this.state.externalWindow.focus(); 
+                    return;
+                }
                 const width = 400;
                 const height = 700;
-                const left = window.screen.width - width - 50; // Align to right
+                const left = window.screen.width - width - 50; 
                 const top = 100;
-                
-                // Features for popup window (hide toolbars etc.)
                 const features = `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes,status=no,toolbar=no,menubar=no,location=no`;
-                
-                window.open(url, 'AgentAngel', features);
+                this.state.externalWindow = window.open(url, 'ExternalExpert', features);
             },
 
+            saveAgentChat() {
+                if (this.state.chatHistory.length === 0) {
+                    alert("目前沒有對話紀錄");
+                    return;
+                }
+                const ingestText = this.state.chatHistory.map(m => m.ingestLine).join('\n');
+                let chatHtml = this.state.chatHistory.map(msg => `
+                    <div class="message ${msg.role}">
+                        <div class="author">${msg.role === 'user' ? 'You' : 'Gemini'}</div>
+                        <div class="content">${DOMPurify.sanitize(marked.parse(msg.text))}</div>
+                    </div>
+                `).join('');
+                const htmlTemplate = `<!DOCTYPE html><html lang="zh-TW"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Force AI Chat Log</title><style>body { font-family: 'Inter', sans-serif; line-height: 1.6; color: #334155; max-width: 800px; margin: 0 auto; padding: 40px 20px; background-color: #f8fafc; } .container { background: white; padding: 40px; border-radius: 16px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); border: 1px solid #e2e8f0; } h1 { color: #0f172a; margin-bottom: 20px; border-bottom: 2px solid #a855f7; display: inline-block; } .message { margin-bottom: 20px; padding: 15px; border-radius: 10px; } .message.user { background-color: #f0f9ff; border-left: 4px solid #0ea5e9; } .message.model { background-color: #faf5ff; border-left: 4px solid #a855f7; } .author { font-weight: bold; font-size: 0.8em; text-transform: uppercase; margin-bottom: 5px; color: #64748b; } pre { background: #1e293b; color: #fff; padding: 10px; border-radius: 5px; overflow-x: auto; }</style></head><body><div class="container"><h1>Internal Agent Chat Log</h1><h2 style="margin-top:24px;margin-bottom:8px;font-size:16px;color:#0f172a;">AI Ingest Text (Copy/Paste)</h2>
+<p style="margin:0 0 10px 0;font-size:12px;color:#64748b;">
+此區塊為「人機共讀」的結構化對話備份：含角色、時間戳與 META，可直接貼給其他 AI / RAG / Agent 進行解吸。
+</p>
+<div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;">
+  <button id="copyIngestBtn" style="padding:8px 12px;border-radius:10px;border:1px solid #e2e8f0;background:#0ea5e9;color:white;font-weight:700;font-size:12px;cursor:pointer;">
+    一鍵複製 Ingest Text
+  </button>
+  <span id="copyIngestHint" style="font-size:12px;color:#64748b;"></span>
+</div>
+<textarea id="ingestTextArea" style="width:100%;height:220px;font-family:monospace;font-size:12px;line-height:1.4;padding:12px;border-radius:12px;border:1px solid #e2e8f0;background:#f8fafc;">${ingestText}</textarea>${chatHtml}</div><script>
+(function(){
+  const btn = document.getElementById('copyIngestBtn');
+  const ta = document.getElementById('ingestTextArea');
+  const hint = document.getElementById('copyIngestHint');
+  if(!btn || !ta) return;
+
+  btn.addEventListener('click', async () => {
+    try {
+      ta.select();
+      ta.setSelectionRange(0, ta.value.length);
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(ta.value);
+      } else {
+        document.execCommand('copy');
+      }
+      hint.textContent = '✅ 已複製';
+      setTimeout(()=> hint.textContent = '', 1500);
+    } catch (e) {
+      hint.textContent = '⚠️ 複製失敗，請手動全選複製';
+    }
+  });
+})();
+<\/script></body></html>`;
+                const blob = new Blob([htmlTemplate], { type: 'text/html' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `Gemini-Log-${this.getTimestampFilename().replace('.html', '')}.html`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            },
+
+            // --- Standard App Logic (Tabs, Files, etc.) ---
             switchTab(mode) {
                 const btnResult = document.getElementById('tabResult');
                 const btnPreview = document.getElementById('tabPreview');
                 const viewResult = document.getElementById('viewResult');
                 const viewPreview = document.getElementById('viewPreview');
-
                 if (mode === 'result') {
-                    btnResult.classList.replace('text-slate-500', 'text-brand-600');
-                    btnResult.classList.replace('border-transparent', 'border-brand-600');
-                    btnPreview.classList.replace('text-brand-600', 'text-slate-500');
-                    btnPreview.classList.replace('border-brand-600', 'border-transparent');
-                    viewResult.classList.remove('hidden');
-                    viewPreview.classList.add('hidden');
+                    if (btnResult) {
+                        btnResult.classList.replace('text-slate-500', 'text-brand-600');
+                        btnResult.classList.replace('border-transparent', 'border-brand-600');
+                    }
+                    if (btnPreview) {
+                        btnPreview.classList.replace('text-brand-600', 'text-slate-500');
+                        btnPreview.classList.replace('border-brand-600', 'border-transparent');
+                    }
+                    if (viewResult) viewResult.classList.remove('hidden');
+                    if (viewPreview) viewPreview.classList.add('hidden');
                 } else {
-                    btnPreview.classList.replace('text-slate-500', 'text-brand-600');
-                    btnPreview.classList.replace('border-transparent', 'border-brand-600');
-                    btnResult.classList.replace('text-brand-600', 'text-slate-500');
-                    btnResult.classList.replace('border-brand-600', 'border-transparent');
-                    viewPreview.classList.remove('hidden');
-                    viewResult.classList.add('hidden');
+                    if (btnPreview) {
+                        btnPreview.classList.replace('text-slate-500', 'text-brand-600');
+                        btnPreview.classList.replace('border-transparent', 'border-brand-600');
+                    }
+                    if (btnResult) {
+                        btnResult.classList.replace('text-brand-600', 'text-slate-500');
+                        btnResult.classList.replace('border-brand-600', 'border-transparent');
+                    }
+                    if (viewPreview) viewPreview.classList.remove('hidden');
+                    if (viewResult) viewResult.classList.add('hidden');
                 }
             },
 
             switchSourceTab(mode) {
-                // Reset all
                 [this.els.tabBtnUpload, this.els.tabBtnPaste, this.els.tabBtnJson].forEach(el => {
-                    el.classList.remove('source-tab-active', 'source-tab-json-active');
-                    el.classList.add('source-tab-inactive');
+                    if (el) {
+                        el.classList.remove('source-tab-active', 'source-tab-json-active');
+                        el.classList.add('source-tab-inactive');
+                    }
                 });
-                [this.els.sourceContentUpload, this.els.sourceContentPaste, this.els.sourceContentJson].forEach(el => el.classList.add('hidden'));
-
+                [this.els.sourceContentUpload, this.els.sourceContentPaste, this.els.sourceContentJson].forEach(el => {
+                    if (el) el.classList.add('hidden');
+                });
+                
                 if (mode === 'upload') {
-                    this.els.tabBtnUpload.classList.add('source-tab-active');
-                    this.els.tabBtnUpload.classList.remove('source-tab-inactive');
-                    this.els.sourceContentUpload.classList.remove('hidden');
+                    if (this.els.tabBtnUpload) {
+                        this.els.tabBtnUpload.classList.add('source-tab-active');
+                        this.els.tabBtnUpload.classList.remove('source-tab-inactive');
+                    }
+                    if (this.els.sourceContentUpload) this.els.sourceContentUpload.classList.remove('hidden');
                 } else if (mode === 'paste') {
-                    this.els.tabBtnPaste.classList.add('source-tab-active');
-                    this.els.tabBtnPaste.classList.remove('source-tab-inactive');
-                    this.els.sourceContentPaste.classList.remove('hidden');
-                    if (!this.els.pasteFileName.value) {
+                    if (this.els.tabBtnPaste) {
+                        this.els.tabBtnPaste.classList.add('source-tab-active');
+                        this.els.tabBtnPaste.classList.remove('source-tab-inactive');
+                    }
+                    if (this.els.sourceContentPaste) this.els.sourceContentPaste.classList.remove('hidden');
+                    if (this.els.pasteFileName && !this.els.pasteFileName.value) {
                         this.els.pasteFileName.value = this.getTimestampFilename();
                     }
                 } else if (mode === 'json') {
-                    this.els.tabBtnJson.classList.add('source-tab-json-active');
-                    this.els.tabBtnJson.classList.remove('source-tab-inactive');
-                    this.els.sourceContentJson.classList.remove('hidden');
+                    if (this.els.tabBtnJson) {
+                        this.els.tabBtnJson.classList.add('source-tab-json-active');
+                        this.els.tabBtnJson.classList.remove('source-tab-inactive');
+                    }
+                    if (this.els.sourceContentJson) this.els.sourceContentJson.classList.remove('hidden');
                 }
             },
 
-            // --- New JSON Logic ---
+            async handleFile(file) {
+                if (!file) return;
+                const ext = file.name.split('.').pop().toLowerCase();
+                if (!['mhtml', 'mht', 'html', 'htm'].includes(ext)) {
+                    alert('不支援的檔案格式。請上傳 .mhtml, .mht, .html 或 .htm');
+                    return;
+                }
+                
+                this.state.file = file;
+                if(this.els.loading) this.els.loading.classList.remove('hidden'); // Show loading
+                if(this.els.fileNameDisplay) this.els.fileNameDisplay.textContent = file.name;
+                if(this.els.fileInfo) this.els.fileInfo.classList.remove('hidden');
+                const metaTitle = document.getElementById('metaTitle');
+                if(metaTitle) metaTitle.value = file.name.replace(/\.[^/.]+$/, "");
+                this.setManualMode(false);
+
+                try {
+                    // Use Promise to handle FileReader for robust error catching
+                    const content = await new Promise((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onload = (e) => resolve(e.target.result);
+                        reader.onerror = (e) => reject(new Error("FileReader Error"));
+                        reader.readAsText(file);
+                    });
+                    
+                    // Proceed to process content after a brief delay to allow UI to render spinner
+                    setTimeout(() => this.processContent(content, ext), 50);
+                    
+                } catch (err) {
+                    console.error("File Read Error:", err);
+                    alert("讀取檔案發生錯誤：" + err.message);
+                    if(this.els.loading) this.els.loading.classList.add('hidden'); // Ensure loading is hidden on error
+                }
+            },
+
             handleJsonFile(file) {
                 if (!file) return;
                 const reader = new FileReader();
@@ -563,16 +1196,11 @@
             previewJson(jsonStr) {
                 try {
                     const data = JSON.parse(jsonStr);
-                    // Minimal validation
                     if (!data.metadata && !data.content) throw new Error("Invalid structure");
-                    
                     this.state.importedJson = data;
                     this.els.jsonPreview.classList.remove('hidden');
                     this.els.jpTitle.textContent = data.metadata?.title || '未命名';
                     this.els.jpDate.textContent = data.metadata?.date || '---';
-                    this.els.jpMemo.textContent = data.metadata?.memo ? '有' : '無';
-                    this.els.jpLen.textContent = (data.content?.length || 0) + ' chars';
-                    
                 } catch (e) {
                     this.state.importedJson = null;
                     this.els.jsonPreview.classList.add('hidden');
@@ -585,36 +1213,23 @@
                     return;
                 }
                 const data = this.state.importedJson;
-                
-                // 1. Populate Metadata Fields
                 if (data.metadata) {
                     document.getElementById('metaTitle').value = data.metadata.title || '';
                     document.getElementById('metaDate').value = data.metadata.date || '';
                     document.getElementById('metaTags').value = data.metadata.tags || '';
                     document.getElementById('metaNotes').value = data.metadata.notes || '';
                     document.getElementById('metaMemo').value = data.metadata.memo || '';
-                    
-                    // Update state
                     this.state.metadata = data.metadata;
                 }
-
-                // 2. Populate Content
                 this.state.finalOutput = data.content || '';
                 this.els.outputArea.value = this.state.finalOutput;
                 this.updateWordCount();
-
-                // 3. Set Manual Mode (Since this is imported data, we assume manual control)
                 this.setManualMode(true);
-                
-                // 4. Unlock UI
                 this.els.metaSection.classList.remove('opacity-50', 'pointer-events-none');
                 this.els.exportSection.classList.remove('opacity-50', 'pointer-events-none');
-                
-                // 5. Notify
-                alert('匯入成功！已還原專案狀態。');
+                alert('匯入成功！');
             },
 
-            // --- Existing Logic ---
             getTimestampFilename() {
                 const now = new Date();
                 const year = now.getFullYear();
@@ -637,38 +1252,18 @@
                     alert('請貼上內容');
                     return;
                 }
-
                 let filename = this.els.pasteFileName.value.trim();
                 if (!filename) filename = this.getTimestampFilename();
                 filename = this.sanitizeFilename(filename);
-
                 let finalHtml = '';
                 const lowerContent = content.toLowerCase();
-                
                 if (lowerContent.includes('<!doctype html>') || lowerContent.includes('<html')) {
                     finalHtml = content;
                 } else {
-                    const escapedContent = content
-                        .replace(/&/g, "&amp;")
-                        .replace(/</g, "&lt;")
-                        .replace(/>/g, "&gt;")
-                        .replace(/"/g, "&quot;")
-                        .replace(/'/g, "&#039;");
-                        
-                    finalHtml = `<!DOCTYPE html>
-<html lang="zh-TW">
-<head>
-    <meta charset="UTF-8">
-    <title>${filename}</title>
-</head>
-<body>
-    <pre><code>${escapedContent}</code></pre>
-</body>
-</html>`;
+                    const escapedContent = content.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+                    finalHtml = `<!DOCTYPE html><html lang="zh-TW"><head><meta charset="UTF-8"><title>${filename}</title></head><body><pre><code>${escapedContent}</code></pre></body></html>`;
                 }
-
                 const file = new File([finalHtml], filename, { type: "text/html" });
-
                 if (action === 'download') {
                     const url = URL.createObjectURL(file);
                     const a = document.createElement('a');
@@ -684,60 +1279,43 @@
             },
 
             toggleHelp() {
-                this.els.helpModal.classList.toggle('hidden');
+                if (this.els.helpModal) this.els.helpModal.classList.toggle('hidden');
             },
 
             setManualMode(isManual) {
                 this.state.isManualEdit = isManual;
                 if (isManual) {
-                    this.els.appBody.classList.remove('mode-sync');
-                    this.els.appBody.classList.add('mode-manual');
-                    this.els.syncStatus.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-amber-500 status-dot"></span>手動編輯中`;
-                    this.els.syncStatus.className = "flex items-center gap-1.5 text-[10px] font-medium text-amber-600 px-2 py-1 bg-amber-50 rounded-full border border-amber-100";
-                    
-                    this.els.manualModeOverlay.classList.remove('hidden');
-                    this.els.editIndicator.classList.remove('hidden');
+                    if (this.els.appBody) {
+                        this.els.appBody.classList.remove('mode-sync');
+                        this.els.appBody.classList.add('mode-manual');
+                    }
+                    // Fix: Check for syncStatus existence
+                    if (this.els.syncStatus) {
+                        this.els.syncStatus.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-amber-500 status-dot"></span>手動編輯中`;
+                        this.els.syncStatus.className = "flex items-center gap-1.5 text-[10px] font-medium text-amber-600 px-2 py-1 bg-amber-50 rounded-full border border-amber-100";
+                    }
+                    if (this.els.manualModeOverlay) this.els.manualModeOverlay.classList.remove('hidden');
+                    if (this.els.editIndicator) this.els.editIndicator.classList.remove('hidden');
                 } else {
-                    this.els.appBody.classList.remove('mode-manual');
-                    this.els.appBody.classList.add('mode-sync');
-                    this.els.syncStatus.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-green-500 status-dot"></span>自動同步中`;
-                    this.els.syncStatus.className = "flex items-center gap-1.5 text-[10px] font-medium text-green-600 px-2 py-1 bg-green-50 rounded-full border border-green-100";
-                    
-                    this.els.manualModeOverlay.classList.add('hidden');
-                    this.els.editIndicator.classList.add('hidden');
+                    if (this.els.appBody) {
+                        this.els.appBody.classList.remove('mode-manual');
+                        this.els.appBody.classList.add('mode-sync');
+                    }
+                    // Fix: Check for syncStatus existence
+                    if (this.els.syncStatus) {
+                        this.els.syncStatus.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-green-500 status-dot"></span>自動同步中`;
+                        this.els.syncStatus.className = "flex items-center gap-1.5 text-[10px] font-medium text-green-600 px-2 py-1 bg-green-50 rounded-full border border-green-100";
+                    }
+                    if (this.els.manualModeOverlay) this.els.manualModeOverlay.classList.add('hidden');
+                    if (this.els.editIndicator) this.els.editIndicator.classList.add('hidden');
                 }
             },
 
             restoreSync() {
-                if(confirm('確定要恢復自動同步嗎？\n這將會遺失您剛才手動編輯的內容，並重置為自動清洗結果。')) {
+                if(confirm('確定要恢復自動同步嗎？這將會遺失手動編輯的內容。')) {
                     this.setManualMode(false);
                     this.updateOutput(true);
                 }
-            },
-
-            async handleFile(file) {
-                if (!file) return;
-                
-                const ext = file.name.split('.').pop().toLowerCase();
-                if (!['mhtml', 'mht', 'html', 'htm'].includes(ext)) {
-                    alert('不支援的檔案格式。請上傳 .mhtml, .mht, .html 或 .htm');
-                    return;
-                }
-
-                this.state.file = file;
-                this.els.loading.classList.remove('hidden');
-                
-                this.els.fileNameDisplay.textContent = file.name;
-                this.els.fileInfo.classList.remove('hidden');
-                document.getElementById('metaTitle').value = file.name.replace(/\.[^/.]+$/, "");
-                
-                this.setManualMode(false);
-
-                setTimeout(() => {
-                    const reader = new FileReader();
-                    reader.onload = (e) => this.processContent(e.target.result, ext);
-                    reader.readAsText(file);
-                }, 100);
             },
 
             processContent(content, ext) {
@@ -748,70 +1326,66 @@
                     } else {
                         htmlContent = content;
                     }
-
                     this.state.rawHtml = htmlContent;
-                    this.els.previewFrame.srcdoc = htmlContent;
-
+                    if (this.els.previewFrame) this.els.previewFrame.srcdoc = htmlContent;
                     const parser = new DOMParser();
                     const doc = parser.parseFromString(htmlContent, 'text/html');
-                    
                     ['script', 'style', 'noscript', 'meta', 'link', 'svg', 'iframe'].forEach(tag => {
                         doc.querySelectorAll(tag).forEach(el => el.remove());
                     });
-
                     this.state.parsedBody = this.domToMarkdown(doc.body).replace(/\n{3,}/g, '\n\n').trim();
-
-                    this.els.metaSection.classList.remove('opacity-50', 'pointer-events-none');
-                    this.els.exportSection.classList.remove('opacity-50', 'pointer-events-none');
-                    this.els.loading.classList.add('hidden');
-
+                    if (this.els.metaSection) this.els.metaSection.classList.remove('opacity-50', 'pointer-events-none');
+                    if (this.els.exportSection) this.els.exportSection.classList.remove('opacity-50', 'pointer-events-none');
+                    if (this.els.loading) this.els.loading.classList.add('hidden');
                     this.updateOutput(true);
-
                 } catch (err) {
-                    console.error(err);
+                    console.error("Processing Error:", err);
                     alert('解析失敗：' + err.message);
-                    this.els.loading.classList.add('hidden');
+                    if (this.els.loading) this.els.loading.classList.add('hidden');
                 }
             },
 
             updateOutput(regenerate) {
                 if (this.state.isManualEdit && !regenerate) return;
-
-                this.state.metadata = {
-                    title: document.getElementById('metaTitle').value || 'Untitled',
-                    date: document.getElementById('metaDate').value,
-                    tags: document.getElementById('metaTags').value,
-                    notes: document.getElementById('metaNotes').value,
-                    memo: document.getElementById('metaMemo').value
+                
+                const getVal = (id) => {
+                    const el = document.getElementById(id);
+                    return el ? el.value : '';
                 };
 
+                this.state.metadata = {
+                    title: getVal('metaTitle') || 'Untitled',
+                    date: getVal('metaDate'),
+                    tags: getVal('metaTags'),
+                    notes: getVal('metaNotes'),
+                    memo: getVal('metaMemo')
+                };
                 const header = [
                     `# ${this.state.metadata.title}`,
                     `> Date: ${this.state.metadata.date}`,
                     this.state.metadata.tags ? `> Tags: ${this.state.metadata.tags}` : null,
                     this.state.metadata.notes ? `> Note: ${this.state.metadata.notes}` : null,
-                    `> Copyright: Force Cheng x 宏大職訓2025產業新尖兵課程`,
+                    `> Copyright: Force Cheng 2025/12/20`,
                     `\n---\n`
                 ].filter(Boolean).join('\n');
-
                 this.state.finalOutput = header + this.state.parsedBody;
-                this.els.outputArea.value = this.state.finalOutput;
+                if (this.els.outputArea) this.els.outputArea.value = this.state.finalOutput;
                 this.updateWordCount();
             },
             
             updateWordCount() {
-                this.els.wordCount.textContent = `${this.state.finalOutput.length} 字元`;
+                if (this.els.wordCount) {
+                    this.els.wordCount.textContent = `${this.state.finalOutput.length} 字元`;
+                }
             },
 
             download(format) {
                 if (!this.state.file && format !== 'memo' && !this.state.isManualEdit) {
-                    // Allow download if manual edit is active (even without file)
                     if (!this.state.isManualEdit) {
                         alert('請先匯入檔案');
                         return;
                     }
                 }
-
                 let content = '';
                 let mimeType = '';
                 let ext = '';
@@ -820,31 +1394,15 @@
                 const fileNameBase = this.state.metadata.title || 'cleaned';
                 const memoContent = this.state.metadata.memo ? this.state.metadata.memo.trim() : '';
                 const sourceFileName = this.state.file?.name || 'Imported';
-                
-                const separateMemoContent = memoContent ? 
-                    `# 附加說明檔 (Memo)\n> 來源檔案: ${sourceFileName}\n> 建立日期: ${new Date().toLocaleDateString()}\n\n${memoContent}`
-                    : '';
+                const separateMemoContent = memoContent ? `# 附加說明檔 (Memo)\n> 來源檔案: ${sourceFileName}\n> 建立日期: ${new Date().toLocaleDateString()}\n\n${memoContent}` : '';
 
                 if (format === 'zip') {
                     const zip = new JSZip();
-                    
-                    if (this.state.file) {
-                         zip.file(this.state.file.name, this.state.file);
-                    }
-                    
+                    if (this.state.file) { zip.file(this.state.file.name, this.state.file); }
                     zip.file(`${fileNameBase}.md`, this.state.finalOutput);
-
-                    const jsonContent = JSON.stringify({
-                        metadata: { ...this.state.metadata, copyright: 'Force Cheng 2025' },
-                        content: this.state.finalOutput,
-                        source: this.state.file?.name || 'Imported'
-                    }, null, 2);
+                    const jsonContent = JSON.stringify({ metadata: { ...this.state.metadata, copyright: 'Force Cheng 2025' }, content: this.state.finalOutput, source: this.state.file?.name || 'Imported' }, null, 2);
                     zip.file(`${fileNameBase}_data.json`, jsonContent);
-
-                    if (separateMemoContent) {
-                        zip.file(`(Memo) ${fileNameBase}.md`, separateMemoContent);
-                    }
-                    
+                    if (separateMemoContent) { zip.file(`(Memo) ${fileNameBase}.md`, separateMemoContent); }
                     zip.generateAsync({type:"blob"}).then((content) => {
                         const url = URL.createObjectURL(content);
                         const a = document.createElement('a');
@@ -857,12 +1415,8 @@
                     });
                     return;
                 }
-
                 if (format === 'memo') {
-                    if (!separateMemoContent) {
-                        alert('目前沒有填寫任何附加說明內容。');
-                        return;
-                    }
+                    if (!separateMemoContent) { alert('目前沒有填寫任何附加說明內容。'); return; }
                     blob = new Blob([separateMemoContent], { type: 'text/markdown' });
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement('a');
@@ -874,29 +1428,11 @@
                     URL.revokeObjectURL(url);
                     return;
                 }
-
                 switch (format) {
-                    case 'json':
-                        content = JSON.stringify({
-                            metadata: { ...this.state.metadata, copyright: 'Force Cheng 2025' },
-                            content: this.state.finalOutput,
-                            source: this.state.file?.name || 'Imported'
-                        }, null, 2);
-                        mimeType = 'application/json';
-                        ext = 'json';
-                        break;
-                    case 'md':
-                        content = this.state.finalOutput;
-                        mimeType = 'text/markdown';
-                        ext = 'md';
-                        break;
-                    case 'txt':
-                        content = this.state.finalOutput;
-                        mimeType = 'text/plain';
-                        ext = 'txt';
-                        break;
+                    case 'json': content = JSON.stringify({ metadata: { ...this.state.metadata, copyright: 'Force Cheng 2025' }, content: this.state.finalOutput, source: this.state.file?.name || 'Imported' }, null, 2); mimeType = 'application/json'; ext = 'json'; break;
+                    case 'md': content = this.state.finalOutput; mimeType = 'text/markdown'; ext = 'md'; break;
+                    case 'txt': content = this.state.finalOutput; mimeType = 'text/plain'; ext = 'txt'; break;
                 }
-
                 blob = new Blob([content], { type: mimeType });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
@@ -908,7 +1444,6 @@
                 URL.revokeObjectURL(url);
             },
 
-            // --- Logic Helpers ---
             decodeQuotedPrintable(str) {
                 const cleanStr = str.replace(/=\r?\n/g, '');
                 const bytes = [];
@@ -916,19 +1451,10 @@
                     const char = cleanStr[i];
                     if (char === '=') {
                         const hex = cleanStr.substr(i + 1, 2);
-                        if (/^[0-9A-F]{2}$/i.test(hex)) {
-                            bytes.push(parseInt(hex, 16));
-                            i += 2;
-                        } else {
-                            bytes.push(61);
-                        }
-                    } else {
-                        bytes.push(char.charCodeAt(0));
-                    }
+                        if (/^[0-9A-F]{2}$/i.test(hex)) { bytes.push(parseInt(hex, 16)); i += 2; } else { bytes.push(61); }
+                    } else { bytes.push(char.charCodeAt(0)); }
                 }
-                try {
-                    return new TextDecoder('utf-8').decode(new Uint8Array(bytes));
-                } catch (e) { return cleanStr; }
+                try { return new TextDecoder('utf-8').decode(new Uint8Array(bytes)); } catch (e) { return cleanStr; }
             },
 
             extractHtmlFromMhtml(content) {
@@ -943,13 +1469,8 @@
                         if (splitIndex === -1) continue;
                         const headerPart = part.substring(0, splitIndex);
                         let bodyPart = part.substring(splitIndex + (bodyIndex !== -1 ? 4 : 2));
-                        if (headerPart.includes('Content-Transfer-Encoding: quoted-printable')) {
-                            bodyPart = this.decodeQuotedPrintable(bodyPart);
-                        } else if (headerPart.includes('Content-Transfer-Encoding: base64')) {
-                            try {
-                                bodyPart = new TextDecoder('utf-8').decode(Uint8Array.from(atob(bodyPart.replace(/\s/g, '')), c => c.charCodeAt(0)));
-                            } catch (e) {}
-                        }
+                        if (headerPart.includes('Content-Transfer-Encoding: quoted-printable')) { bodyPart = this.decodeQuotedPrintable(bodyPart); } 
+                        else if (headerPart.includes('Content-Transfer-Encoding: base64')) { try { bodyPart = new TextDecoder('utf-8').decode(Uint8Array.from(atob(bodyPart.replace(/\s/g, '')), c => c.charCodeAt(0))); } catch (e) {} }
                         return bodyPart;
                     }
                 }
